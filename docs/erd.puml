@@ -1,0 +1,86 @@
+@startuml University Routine Management System ERD
+
+!define table(x) class x << (T,#FFAAAA) >>
+!define primary_key(x) <u>x</u>
+!define foreign_key(x) #x#
+
+skinparam class {
+    BackgroundColor White
+    ArrowColor #2688d4
+    BorderColor #2688d4
+}
+
+table(teachers) {
+    primary_key(teacher_id): SERIAL
+    name: VARCHAR(100)
+    email: VARCHAR(100)
+    created_at: TIMESTAMP
+}
+
+table(courses) {
+    primary_key(course_id): SERIAL
+    course_code: VARCHAR(20)
+    course_name: VARCHAR(100)
+    credit_hours: DECIMAL
+    created_at: TIMESTAMP
+}
+
+table(rooms) {
+    primary_key(room_id): SERIAL
+    room_number: VARCHAR(10)
+    created_at: TIMESTAMP
+}
+
+table(days) {
+    primary_key(day_id): SERIAL
+    day_name: VARCHAR(10)
+    day_order: INTEGER
+}
+
+table(time_slots) {
+    primary_key(slot_id): SERIAL
+    start_time: TIME
+    end_time: TIME
+    slot_order: INTEGER
+}
+
+table(allocations) {
+    primary_key(allocation_id): SERIAL
+    foreign_key(teacher_id): INTEGER
+    foreign_key(course_id): INTEGER
+    foreign_key(room_id): INTEGER
+    foreign_key(day_id): INTEGER
+    foreign_key(slot_id): INTEGER
+    created_at: TIMESTAMP
+}
+
+table(routine) {
+    primary_key(routine_id): SERIAL
+    foreign_key(day_id): INTEGER
+    foreign_key(slot_id): INTEGER
+    course_code: VARCHAR(20)
+    room_number: VARCHAR(10)
+    teacher_name: VARCHAR(100)
+}
+
+' Relationships
+allocations "1" -- "1" teachers : has
+allocations "1" -- "1" courses : has
+allocations "1" -- "1" rooms : uses
+allocations "1" -- "1" days : on
+allocations "1" -- "1" time_slots : at
+
+' Direct relationship between allocations and routine
+allocations "1" ..> "1" routine : generates >
+
+routine "1" -- "1" days : on
+routine "1" -- "1" time_slots : at
+
+note "Routine is a denormalized view of allocations\nUpdated automatically via trigger:\n- When allocation is created\n- When allocation is updated\n- When allocation is deleted" as N1
+allocations .. N1
+N1 .. routine
+
+note "Daily limit: 4 hours\nWeekly limit: 13 hours" as N2
+teachers .. N2
+
+@enduml

@@ -137,15 +137,21 @@ const AllocationForm = ({ onAllocationCreated }) => {
         setIsSubmitting(true);
         setError('');
         setWorkloadWarning('');
-        setSuccess('');
 
         try {
             const response = await axios.post('http://localhost:5000/api/allocations', formData);
+
             setSuccess('Allocation created successfully!');
             resetForm();
             if (onAllocationCreated) {
                 onAllocationCreated(response.data);
             }
+
+            // Refresh the page after a short delay
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
+
         } catch (err) {
             const errorMessage = err.response?.data?.error || 'Error creating allocation';
             

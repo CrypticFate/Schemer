@@ -93,6 +93,39 @@ app.get("/api/teachers", async (req, res) => {
     }
 });
 
+// Create teacher
+app.post("/api/teachers", async (req, res) => {
+    try {
+        const { name, email } = req.body;
+        
+        // Validate required fields
+        if (!name || !email) {
+            return res.status(400).json({
+                error: "Both name and email are required"
+            });
+        }
+
+        const newTeacher = await pool.query(
+            "INSERT INTO teachers (name, email) VALUES ($1, $2) RETURNING *",
+            [name, email]
+        );
+
+        res.json(newTeacher.rows[0]);
+    } catch (err) {
+        console.error(err.message);
+        if (err.code === '23505') {
+            res.status(400).json({
+                error: "A teacher with this email already exists"
+            });
+        } else {
+            res.status(500).json({
+                error: "Error creating teacher",
+                details: err.message
+            });
+        }
+    }
+});
+
 // Get teacher's schedule
 app.get("/api/teachers/:teacherId/schedule", async (req, res) => {
     try {
@@ -118,6 +151,46 @@ app.get("/api/courses", async (req, res) => {
     } catch (err) {
         console.error(err.message);
         res.status(500).json({ error: err.message });
+    }
+});
+
+// Create course
+app.post("/api/courses", async (req, res) => {
+    try {
+        const { course_code, course_name, credit_hours } = req.body;
+        
+        // Validate required fields
+        if (!course_code || !course_name || !credit_hours) {
+            return res.status(400).json({
+                error: "Course code, name, and credit hours are required"
+            });
+        }
+
+        // Validate credit hours
+        if (credit_hours <= 0) {
+            return res.status(400).json({
+                error: "Credit hours must be greater than 0"
+            });
+        }
+
+        const newCourse = await pool.query(
+            "INSERT INTO courses (course_code, course_name, credit_hours) VALUES ($1, $2, $3) RETURNING *",
+            [course_code, course_name, credit_hours]
+        );
+
+        res.json(newCourse.rows[0]);
+    } catch (err) {
+        console.error(err.message);
+        if (err.code === '23505') {
+            res.status(400).json({
+                error: "A course with this code already exists"
+            });
+        } else {
+            res.status(500).json({
+                error: "Error creating course",
+                details: err.message
+            });
+        }
     }
 });
 
@@ -260,6 +333,50 @@ app.delete("/api/allocations/:id", async (req, res) => {
             error: "Error deleting allocation",
             details: err.message
         });
+    }
+});
+
+// Get routine
+app.get("/api/routine", async (req, res) => {
+    try {
+        const routine = await pool.query(
+            "SELECT * FROM get_formatted_routine()"
+        );
+        
+        // Transform the data into a structured format
+        const formattedRoutine = routine.rows.reduce((acc, row) => {
+            const { day_name, time_slot, course_code, room_number, teacher_name } = row;
+            
+            // Initialize day if not exists
+            if (!acc[day_name]) {
+                acc[day_name] = {};
+            }
+            
+            // Add time slot data
+            acc[day_name][time_slot] = {
+                course_code,
+                room_number,
+                teacher_name
+            };
+            
+            return acc;
+        }, {});
+        
+        res.json(formattedRoutine);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).json({ error: "Error fetching routine" });
+    }
+});
+
+// Force regenerate routine
+app.post("/api/routine/regenerate", async (req, res) => {
+    try {
+        await pool.query("SELECT generate_routine()");
+        res.json({ message: "Routine regenerated successfully" });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).json({ error: "Error regenerating routine" });
     }
 });
 
