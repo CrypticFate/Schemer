@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Table, Button, Alert, Card } from 'react-bootstrap';
+import { Table, Button, Alert, Card, Form } from 'react-bootstrap';
 
 const AllocationList = ({ refresh }) => {
     const [allocations, setAllocations] = useState({});
     const [error, setError] = useState('');
+    const [selectedDay, setSelectedDay] = useState(''); // State for the selected day
 
     useEffect(() => {
         getAllocations();
@@ -13,7 +14,7 @@ const AllocationList = ({ refresh }) => {
     const getAllocations = async () => {
         try {
             const response = await axios.get('http://localhost:5000/api/allocations');
-            
+
             // Group allocations by day
             const grouped = response.data.reduce((acc, curr) => {
                 if (!acc[curr.day_name]) {
@@ -54,27 +55,50 @@ const AllocationList = ({ refresh }) => {
         });
     };
 
-    if (Object.keys(allocations).length === 0) {
-        return (
-            <div className="mt-4">
-                <h3>Current Allocations</h3>
-                {error && <Alert variant="danger">{error}</Alert>}
-                <Alert variant="info">No allocations found</Alert>
-            </div>
-        );
-    }
+    const handleDayChange = (event) => {
+        setSelectedDay(event.target.value);
+    };
+
+    // Filter days to only include those with allocations
+    const availableDays = Object.keys(allocations).filter(day => allocations[day].length > 0);
 
     return (
         <div className="mt-4">
             <h3>Current Allocations</h3>
             {error && <Alert variant="danger">{error}</Alert>}
 
-            {Object.entries(allocations).map(([day, dayAllocations]) => (
-                <Card key={day} className="mb-4">
-                    <Card.Header className="bg-primary text-white">
-                        <h5 className="mb-0">{day}</h5>
-                    </Card.Header>
-                    <Card.Body>
+            <Form.Group controlId="daySelect" className="mb-2">
+                <Form.Select 
+                    value={selectedDay} 
+                    onChange={handleDayChange}
+                    className="custom-select"
+                    style={{ 
+                        backgroundColor: 'cornflowerblue ', 
+                        color: 'white', 
+                        padding: '5px', 
+                        textAlign: 'center', 
+                        appearance: 'none',
+                        WebkitAppearance: 'none',
+                        MozAppearance: 'none',
+                        backgroundImage: 'url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 4 5\'%3E%3Cpath fill=\'white\' d=\'M2 0L0 2h4z\'/%3E%3C/svg%3E")',
+                        backgroundRepeat: 'no-repeat',
+                        backgroundPosition: 'right 0.75rem center',
+                        backgroundSize: '0.65em auto'
+                    }} 
+                >
+                    <option value="">Select Day</option>
+                    {availableDays.map(day => (
+                        <option key={day} value={day}>{day}</option>
+                    ))}
+                </Form.Select>
+            </Form.Group>
+
+            {selectedDay && allocations[selectedDay]?.length > 0 ? (
+                <Card className="mb-3">
+                    {/* <Card.Header className="bg-primary text-white">
+                        <h5 className="mb-0">{selectedDay}</h5>
+                    </Card.Header> */}
+                    <Card.Body style={{ padding: '10px' }}>
                         <Table responsive striped bordered hover>
                             <thead>
                                 <tr>
@@ -86,7 +110,7 @@ const AllocationList = ({ refresh }) => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {dayAllocations.map(allocation => (
+                                {allocations[selectedDay].map(allocation => (
                                     <tr key={allocation.allocation_id}>
                                         <td>
                                             {formatTime(allocation.start_time)} - {formatTime(allocation.end_time)}
@@ -109,7 +133,11 @@ const AllocationList = ({ refresh }) => {
                         </Table>
                     </Card.Body>
                 </Card>
-            ))}
+            ) : selectedDay ? (
+                <Alert variant="info">No allocations found for {selectedDay}</Alert>
+            ) : (
+                <Alert variant="info">Please select a day to view allocations</Alert>
+            )}
         </div>
     );
 };

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Form, Button, Alert, Row, Col } from 'react-bootstrap';
+import { Form, Button, Alert, Row, Col, Spinner } from 'react-bootstrap';
 
 const AllocationForm = ({ onAllocationCreated }) => {
     const [teachers, setTeachers] = useState([]);
@@ -12,6 +12,7 @@ const AllocationForm = ({ onAllocationCreated }) => {
     const [workloadWarning, setWorkloadWarning] = useState('');
     const [success, setSuccess] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [loadingData, setLoadingData] = useState(true);
 
     const [formData, setFormData] = useState({
         teacher_id: '',
@@ -21,9 +22,17 @@ const AllocationForm = ({ onAllocationCreated }) => {
         slot_id: ''
     });
 
+    const [isAllocated, setIsAllocated] = useState(false);
+
     useEffect(() => {
         loadInitialData();
     }, []);
+
+    useEffect(() => {
+        if (formData.course_id) {
+            fetchAllocationForCourse(formData.course_id);
+        }
+    }, [formData.course_id]);
 
     useEffect(() => {
         if (formData.day_id && formData.slot_id) {
@@ -47,6 +56,8 @@ const AllocationForm = ({ onAllocationCreated }) => {
         } catch (err) {
             setError('Error loading initial data');
             console.error(err);
+        } finally {
+            setLoadingData(false);
         }
     };
 
@@ -65,6 +76,33 @@ const AllocationForm = ({ onAllocationCreated }) => {
         }
     };
 
+    const fetchAllocationForCourse = async (course_id) => {
+        try {
+            const response = await axios.get(`http://localhost:5000/api/get-teacher-by-course/${course_id}`);
+            const { teacher_name } = response.data;
+
+            if (teacher_name) {
+                const teacher = teachers.find(t => t.name === teacher_name);
+
+                if (teacher) {
+                    setFormData(prev => ({
+                        ...prev,
+                        teacher_id: teacher.teacher_id
+                    }));
+                    setIsAllocated(true);
+                }
+            } else {
+                setFormData(prev => ({
+                    ...prev,
+                    teacher_id: ''
+                }));
+                setIsAllocated(false);
+            }
+        } catch (err) {
+            console.error('Error fetching allocation for course:', err);
+        }
+    };
+
     const handleInputChange = (e) => {
         const { name, value } = e.target;
         setFormData(prev => ({
@@ -72,15 +110,6 @@ const AllocationForm = ({ onAllocationCreated }) => {
             [name]: value
         }));
 
-        // Reset room selection if day or slot changes
-        if (name === 'day_id' || name === 'slot_id') {
-            setFormData(prev => ({
-                ...prev,
-                room_id: ''
-            }));
-        }
-
-        // Clear any previous messages
         setError('');
         setWorkloadWarning('');
         setSuccess('');
@@ -137,15 +166,20 @@ const AllocationForm = ({ onAllocationCreated }) => {
         setIsSubmitting(true);
         setError('');
         setWorkloadWarning('');
-        setSuccess('');
 
         try {
             const response = await axios.post('http://localhost:5000/api/allocations', formData);
+
             setSuccess('Allocation created successfully!');
             resetForm();
             if (onAllocationCreated) {
                 onAllocationCreated(response.data);
             }
+
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
+
         } catch (err) {
             const errorMessage = err.response?.data?.error || 'Error creating allocation';
             
@@ -163,55 +197,14 @@ const AllocationForm = ({ onAllocationCreated }) => {
     return (
         <div className="mt-4">
             <h3>Create Allocation</h3>
+            {loadingData && <Spinner animation="border" role="status"><span className="visually-hidden">Loading...</span></Spinner>}
             {error && <Alert variant="danger">{error}</Alert>}
-            {workloadWarning && (
-                <Alert variant="warning" className="workload-alert">
-                    {workloadWarning}
-                </Alert>
-            )}
+            {workloadWarning && <Alert variant="warning">{workloadWarning}</Alert>}
             {success && <Alert variant="success">{success}</Alert>}
-            
-            <style>
-                {`
-                    .workload-error {
-                        padding: 10px 0;
-                    }
-                    .workload-error strong {
-                        display: block;
-                        margin-bottom: 8px;
-                        color: #856404;
-                    }
-                    .workload-error div {
-                        margin: 4px 0;
-                    }
-                    .workload-alert {
-                        background-color: #fff3cd;
-                        border-color: #ffeeba;
-                    }
-                `}
-            </style>
             
             <Form onSubmit={handleSubmit}>
                 <Row>
-                    <Col md={6}>
-                        <Form.Group className="mb-3">
-                            <Form.Label>Teacher</Form.Label>
-                            <Form.Select
-                                name="teacher_id"
-                                value={formData.teacher_id}
-                                onChange={handleInputChange}
-                                required
-                            >
-                                <option value="">Select Teacher</option>
-                                {teachers.map(teacher => (
-                                    <option key={teacher.teacher_id} value={teacher.teacher_id}>
-                                        {teacher.name}
-                                    </option>
-                                ))}
-                            </Form.Select>
-                        </Form.Group>
-                    </Col>
-                    <Col md={6}>
+                    <Col md={12}>
                         <Form.Group className="mb-3">
                             <Form.Label>Course</Form.Label>
                             <Form.Select
@@ -234,6 +227,26 @@ const AllocationForm = ({ onAllocationCreated }) => {
                 <Row>
                     <Col md={6}>
                         <Form.Group className="mb-3">
+                            <Form.Label>Teacher</Form.Label>
+                            <Form.Select
+                                name="teacher_id"
+                                value={formData.teacher_id}
+                                onChange={handleInputChange}
+                                required
+                                disabled={isAllocated}
+                            >
+                                <option value="">Select Teacher</option>
+                                {teachers.map(teacher => (
+                                    <option key={teacher.teacher_id} value={teacher.teacher_id}>
+                                        {teacher.name}
+                                    </option>
+                                ))}
+                            </Form.Select>
+                        </Form.Group>
+                    </Col>
+
+                    <Col md={6}>
+                        <Form.Group className="mb-3">
                             <Form.Label>Day</Form.Label>
                             <Form.Select
                                 name="day_id"
@@ -250,6 +263,9 @@ const AllocationForm = ({ onAllocationCreated }) => {
                             </Form.Select>
                         </Form.Group>
                     </Col>
+                </Row>
+
+                <Row>
                     <Col md={6}>
                         <Form.Group className="mb-3">
                             <Form.Label>Time Slot</Form.Label>
@@ -268,25 +284,27 @@ const AllocationForm = ({ onAllocationCreated }) => {
                             </Form.Select>
                         </Form.Group>
                     </Col>
-                </Row>
 
-                <Form.Group className="mb-3">
-                    <Form.Label>Room</Form.Label>
-                    <Form.Select
-                        name="room_id"
-                        value={formData.room_id}
-                        onChange={handleInputChange}
-                        required
-                        disabled={!formData.day_id || !formData.slot_id}
-                    >
-                        <option value="">Select Room</option>
-                        {availableRooms.map(room => (
-                            <option key={room.room_id} value={room.room_id}>
-                                {room.room_number} (Capacity: {room.capacity}{room.is_lab ? ', Lab' : ''})
-                            </option>
-                        ))}
-                    </Form.Select>
-                </Form.Group>
+                    <Col md={6}>
+                        <Form.Group className="mb-3">
+                            <Form.Label>Room</Form.Label>
+                            <Form.Select
+                                name="room_id"
+                                value={formData.room_id}
+                                onChange={handleInputChange}
+                                required
+                                disabled={!formData.day_id || !formData.slot_id}
+                            >
+                                <option value="">Select Room</option>
+                                {availableRooms.map(room => (
+                                    <option key={room.room_id} value={room.room_id}>
+                                        {room.room_number} (Capacity: {room.capacity}{room.is_lab ? ', Lab' : ''})
+                                    </option>
+                                ))}
+                            </Form.Select>
+                        </Form.Group>
+                    </Col>
+                </Row>
 
                 <div className="d-flex justify-content-between">
                     <Button 
@@ -309,5 +327,4 @@ const AllocationForm = ({ onAllocationCreated }) => {
         </div>
     );
 };
-
 export default AllocationForm;
