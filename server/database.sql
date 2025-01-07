@@ -98,11 +98,19 @@ INSERT INTO time_slots (start_time, end_time, slot_order) VALUES
 INSERT INTO rooms (room_number, capacity, is_lab) VALUES
     ('301', 60, false),
     ('302', 60, false),
+<<<<<<< HEAD
     ('304', 60, false),
     ('508', 60, false),  
     ('510', 60, false),
     ('L-1', 30, True), -- Lab
     ('L-2', 30, True);  -- Lab
+=======
+    ('303', 60, false),
+    ('304', 30, true),  -- Lab
+    ('305', 30, true),  -- Lab
+    ('306', 60, false),
+    ('307', 60, false);
+>>>>>>> aa729f0c82735d0c5aa2798efaba5b6d44545f83
 
 -- Drop existing function if exists
 DROP FUNCTION IF EXISTS get_available_rooms(INTEGER, INTEGER);

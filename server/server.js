@@ -192,6 +192,7 @@ app.get("/api/courses", async (req, res) => {
 app.post("/api/courses", async (req, res) => {
     try {
         const { course_code, course_name, credit_hours } = req.body;
+<<<<<<< HEAD
 
         // Validate required fields
         if (!course_code) {
@@ -207,6 +208,13 @@ app.post("/api/courses", async (req, res) => {
         if (!credit_hours) {
             return res.status(400).json({
                 error: "Credit hours required"
+=======
+        
+        // Validate required fields
+        if (!course_code || !course_name || !credit_hours) {
+            return res.status(400).json({
+                error: "Course code, name, and credit hours are required"
+>>>>>>> aa729f0c82735d0c5aa2798efaba5b6d44545f83
             });
         }
 
@@ -216,6 +224,7 @@ app.post("/api/courses", async (req, res) => {
                 error: "Credit hours must be greater than 0"
             });
         }
+<<<<<<< HEAD
         const allocationAvailability = credit_hours === 1.5 ? 1 : credit_hours === 3 ? 2 : null;
 
         if (allocationAvailability === null) {
@@ -228,6 +237,14 @@ app.post("/api/courses", async (req, res) => {
              RETURNING *`,
             [course_code, course_name, credit_hours, allocationAvailability]
         );
+=======
+
+        const newCourse = await pool.query(
+            "INSERT INTO courses (course_code, course_name, credit_hours) VALUES ($1, $2, $3) RETURNING *",
+            [course_code, course_name, credit_hours]
+        );
+
+>>>>>>> aa729f0c82735d0c5aa2798efaba5b6d44545f83
         res.json(newCourse.rows[0]);
     } catch (err) {
         console.error(err.message);
