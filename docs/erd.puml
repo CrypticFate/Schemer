@@ -83,8 +83,4 @@ N1 .. routine
 note "Daily limit: 4 hours\nWeekly limit: 13 hours" as N2
 teachers .. N2
 
-<<<<<<< HEAD
 @enduml
-=======
-@enduml
->>>>>>> aa729f0c82735d0c5aa2798efaba5b6d44545f83

@@ -176,10 +176,6 @@ const AllocationForm = ({ onAllocationCreated }) => {
                 onAllocationCreated(response.data);
             }
 
-<<<<<<< HEAD
-=======
-            // Refresh the page after a short delay
->>>>>>> aa729f0c82735d0c5aa2798efaba5b6d44545f83
             setTimeout(() => {
                 window.location.reload();
             }, 1000);

@@ -154,8 +154,4 @@ const RoutineView = () => {
     );
 };
 
-<<<<<<< HEAD
 export default RoutineView;
-=======
-export default RoutineView;
->>>>>>> aa729f0c82735d0c5aa2798efaba5b6d44545f83
