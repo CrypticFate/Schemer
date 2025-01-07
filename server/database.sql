@@ -21,7 +21,8 @@ CREATE TABLE courses (
     course_id SERIAL PRIMARY KEY,
     course_code VARCHAR(20) UNIQUE NOT NULL,
     course_name VARCHAR(100) NOT NULL,
-    credit_hours DECIMAL(3,1) NOT NULL CHECK (credit_hours > 0)
+    credit_hours DECIMAL(3,1) NOT NULL CHECK (credit_hours > 0 and credit_hours <= 3),
+    allocation_availability INTEGER NOT NULL CHECK (allocation_availability > 0 and allocation_availability < 3)
 );
 
 -- Rooms Table
@@ -65,6 +66,17 @@ CREATE TABLE allocations (
     UNIQUE(teacher_id, day_id, slot_id)
 );
 
+-- Create Routine Table
+CREATE TABLE routine (
+    routine_id SERIAL PRIMARY KEY,
+    day_id INTEGER REFERENCES days(day_id) ON DELETE CASCADE,
+    slot_id INTEGER REFERENCES time_slots(slot_id) ON DELETE CASCADE,
+    course_code VARCHAR(20),
+    room_number VARCHAR(10),
+    teacher_name VARCHAR(100),
+    UNIQUE(day_id, slot_id, room_number)
+);
+
 -- Insert initial data
 
 -- Insert days
@@ -77,20 +89,20 @@ INSERT INTO days (day_name, day_order) VALUES
 
 -- Insert time slots
 INSERT INTO time_slots (start_time, end_time, slot_order) VALUES
-    ('08:30:00', '10:00:00', 1),
-    ('10:30:00', '12:00:00', 2),
-    ('13:30:00', '15:00:00', 3),
-    ('15:30:00', '17:00:00', 4);
+    ('08:00:00', '09:15:00', 1),
+    ('09:15:00', '10:30:00', 2),
+    ('10:30:00', '11:45:00', 3),
+    ('11:45:00', '13:00:00', 4);
 
 -- Insert rooms with capacity and lab status
 INSERT INTO rooms (room_number, capacity, is_lab) VALUES
-    ('301', 40, false),
-    ('302', 40, false),
-    ('303', 35, false),
-    ('304', 30, true),  -- Lab
-    ('305', 30, true),  -- Lab
-    ('306', 45, false),
-    ('307', 35, false);
+    ('301', 60, false),
+    ('302', 60, false),
+    ('304', 60, false),
+    ('508', 60, false),  
+    ('510', 60, false),
+    ('L-1', 30, True), -- Lab
+    ('L-2', 30, True);  -- Lab
 
 -- Drop existing function if exists
 DROP FUNCTION IF EXISTS get_available_rooms(INTEGER, INTEGER);
@@ -140,24 +152,77 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Function to generate routine from allocations
+CREATE OR REPLACE FUNCTION generate_routine()
+RETURNS void AS $$
+BEGIN
+    -- Clear existing routine
+    TRUNCATE TABLE routine;
+    
+    -- Insert new routine data from allocations
+    INSERT INTO routine (day_id, slot_id, course_code, room_number, teacher_name)
+    SELECT 
+        a.day_id,
+        a.slot_id,
+        c.course_code,
+        r.room_number,
+        t.name as teacher_name
+    FROM allocations a
+    JOIN courses c ON a.course_id = c.course_id
+    JOIN rooms r ON a.room_id = r.room_id
+    JOIN teachers t ON a.teacher_id = t.teacher_id
+    ORDER BY a.day_id, a.slot_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger to automatically update routine when allocations change
+CREATE OR REPLACE FUNCTION update_routine_on_allocation_change()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Generate new routine
+    PERFORM generate_routine();
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger for allocation changes
+DROP TRIGGER IF EXISTS allocation_changes_update_routine ON allocations;
+CREATE TRIGGER allocation_changes_update_routine
+    AFTER INSERT OR UPDATE OR DELETE ON allocations
+    FOR EACH STATEMENT
+    EXECUTE FUNCTION update_routine_on_allocation_change();
+
+-- Function to get formatted routine
+CREATE OR REPLACE FUNCTION get_formatted_routine()
+RETURNS TABLE (
+    day_name VARCHAR(10),
+    time_slot TEXT,
+    course_code VARCHAR(20),
+    room_number VARCHAR(10),
+    teacher_name VARCHAR(100)
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        d.day_name,
+        CONCAT(TO_CHAR(ts.start_time, 'HH24:MI'), ' - ', TO_CHAR(ts.end_time, 'HH24:MI')) as time_slot,
+        r.course_code,
+        r.room_number,
+        r.teacher_name
+    FROM routine r
+    JOIN days d ON r.day_id = d.day_id
+    JOIN time_slots ts ON r.slot_id = ts.slot_id
+    ORDER BY d.day_order, ts.slot_order;
+END;
+$$ LANGUAGE plpgsql;
+
 -- Insert sample teachers
 INSERT INTO teachers (name, email) VALUES
     ('Dr. John Smith', 'john.smith@university.edu'),
-    ('Prof. Sarah Johnson', 'sarah.johnson@university.edu'),
-    ('Dr. Michael Chen', 'michael.chen@university.edu'),
-    ('Prof. Emily Brown', 'emily.brown@university.edu'),
-    ('Dr. David Wilson', 'david.wilson@university.edu'),
-    ('Prof. Maria Garcia', 'maria.garcia@university.edu'),
-    ('Dr. James Taylor', 'james.taylor@university.edu'),
-    ('Prof. Lisa Anderson', 'lisa.anderson@university.edu'),
-    ('Dr. Robert Martinez', 'robert.martinez@university.edu'),
     ('Prof. Amanda White', 'amanda.white@university.edu');
 
 -- Insert sample courses
-INSERT INTO courses (course_code, course_name, credit_hours) VALUES
+INSERT INTO courses (course_code, course_name, credit_hours, allocation_availability) VALUES
     -- Computer Science Courses
-    ('CSE101', 'Introduction to Programming', 3.0),
-    ('CSE201', 'Data Structures and Algorithms', 3.0),
-    ('CSE301', 'Database Management Systems', 3.0),
-    ('CSE302', 'Operating Systems', 3.0),
-    ('CSE401', 'Artificial Intelligence', 3.0);
+    ('CSE101', 'Introduction to Programming', 3.0, 2),
+    ('CSE401', 'Artificial Intelligence', 3.0, 2);

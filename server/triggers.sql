@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS allocation_logs (
     logged_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create a function to check teacher workload using cursors
+-- Calcullating teacher workload 
 CREATE OR REPLACE FUNCTION check_teacher_workload() 
 RETURNS TRIGGER AS $$
 DECLARE
@@ -45,15 +45,15 @@ BEGIN
     
     daily_hours := daily_hours + teacher_allocations.credit_hours;
     
-    -- Check if daily hours exceed maximum (4 hours per day)
+    -- daily
     IF daily_hours > 4 THEN
         RAISE EXCEPTION 'Teacher daily workload would exceed 4 hours for this day (Current: % + New: %)', 
             (daily_hours - teacher_allocations.credit_hours), 
             teacher_allocations.credit_hours;
     END IF;
 
-    -- Now check weekly workload
-    total_hours := 0; -- Reset total_hours
+    -- weekly 
+    total_hours := 0; 
     
     -- Get total existing hours
     SELECT COALESCE(SUM(c.credit_hours), 0) INTO total_hours
@@ -64,7 +64,7 @@ BEGIN
     -- Add the new course's credit hours to weekly total
     total_hours := total_hours + teacher_allocations.credit_hours;
     
-    -- Check if total hours exceed maximum (13 hours per week)
+   
     IF total_hours > 13 THEN
         RAISE EXCEPTION 'Teacher weekly workload would exceed 13 hours (Current: % + New: %)', 
             (total_hours - teacher_allocations.credit_hours), 
