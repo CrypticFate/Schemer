@@ -41,12 +41,13 @@ const AllocationList = ({ refresh }) => {
     const handleDelete = async (id) => {
         try {
             await axios.delete(`http://localhost:5000/api/allocations/${id}`);
-            getAllocations();
+            window.location.reload(); // Refresh the entire webpage
         } catch (err) {
             setError('Error deleting allocation');
             console.error(err);
         }
     };
+    
 
     const formatTime = (time) => {
         return new Date('1970/01/01 ' + time).toLocaleTimeString([], { 
@@ -58,6 +59,7 @@ const AllocationList = ({ refresh }) => {
     const handleDayChange = (event) => {
         setSelectedDay(event.target.value);
     };
+
 
     // Filter days to only include those with allocations
     const availableDays = Object.keys(allocations).filter(day => allocations[day].length > 0);
@@ -95,9 +97,6 @@ const AllocationList = ({ refresh }) => {
 
             {selectedDay && allocations[selectedDay]?.length > 0 ? (
                 <Card className="mb-3">
-                    {/* <Card.Header className="bg-primary text-white">
-                        <h5 className="mb-0">{selectedDay}</h5>
-                    </Card.Header> */}
                     <Card.Body style={{ padding: '10px' }}>
                         <Table responsive striped bordered hover>
                             <thead>

@@ -69,6 +69,31 @@ app.get("/api/get-teacher-by-course/:course_id", async (req, res) => {
     }
 });
 
+// Allocation Availability route from Course table 
+app.get("/api/get-availability-by-course/:course_id", async (req, res) => {
+    const { course_id } = req.params;
+
+    try {
+        // Query to fetch the allocation_availability from the courses table for the given course_id
+        const course = await pool.query(
+            `SELECT allocation_availability FROM courses WHERE course_id = $1 LIMIT 1`,
+            [course_id]
+        );
+
+        if (course.rows.length === 0) {
+            return res.json({ allocation_availability: null }); // No course exists with this ID
+        }
+
+        const allocationAvailability = course.rows[0].allocation_availability;
+
+        res.json({ allocation_availability: allocationAvailability });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).json({ error: "Server error" });
+    }
+});
+
+
 // Room availability routes
 app.get("/api/room-availability", async (req, res) => {
     try {
@@ -391,10 +416,25 @@ app.delete("/api/allocations/:id", async (req, res) => {
         // Validate id
         if (!id || isNaN(parseInt(id))) {
             return res.status(400).json({
-                error: "Invalid allocation ID"
+                error: "Invalid allocation ID",
             });
         }
 
+        // Fetch the course_id before deletion
+        const allocation = await pool.query(
+            "SELECT course_id FROM allocations WHERE allocation_id = $1",
+            [id]
+        );
+
+        if (allocation.rows.length === 0) {
+            return res.status(404).json({
+                error: "Allocation not found",
+            });
+        }
+
+        const course_id = allocation.rows[0].course_id;
+
+        // Delete the allocation
         const result = await pool.query(
             "DELETE FROM allocations WHERE allocation_id = $1 RETURNING *",
             [id]
@@ -402,19 +442,41 @@ app.delete("/api/allocations/:id", async (req, res) => {
 
         if (result.rows.length === 0) {
             return res.status(404).json({
-                error: "Allocation not found"
+                error: "Failed to delete allocation",
             });
         }
 
-        res.json({ message: "Allocation deleted successfully" });
+        // Update the allocation_availability value in the courses table
+        const updateAvailability = await pool.query(
+            `
+            UPDATE courses
+            SET allocation_availability = allocation_availability + 1
+            WHERE course_id = $1
+            RETURNING allocation_availability
+            `,
+            [course_id]
+        );
+
+        if (updateAvailability.rows.length === 0) {
+            return res.status(500).json({
+                error: "Failed to update allocation availability",
+            });
+        }
+
+        res.json({
+            message: "Allocation deleted successfully",
+            course_id,
+            new_availability: updateAvailability.rows[0].allocation_availability,
+        });
     } catch (err) {
         console.error("Error in DELETE /api/allocations/:id:", err.message);
         res.status(500).json({
             error: "Error deleting allocation",
-            details: err.message
+            details: err.message,
         });
     }
 });
+
 
 // Get routine
 app.get("/api/routine", async (req, res) => {
