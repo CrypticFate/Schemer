@@ -101,8 +101,8 @@ INSERT INTO rooms (room_number, capacity, is_lab) VALUES
     ('304', 60, false),
     ('508', 60, false),  
     ('510', 60, false),
-    ('L-1', 30, True), -- Lab
-    ('L-2', 30, True);  -- Lab
+    ('L-1', 30, True), 
+    ('L-2', 30, True);  
 
 -- Drop existing function if exists
 DROP FUNCTION IF EXISTS get_available_rooms(INTEGER, INTEGER);
@@ -224,5 +224,5 @@ INSERT INTO teachers (name, email) VALUES
 -- Insert sample courses
 INSERT INTO courses (course_code, course_name, credit_hours, allocation_availability) VALUES
     -- Computer Science Courses
-    ('CSE101', 'Introduction to Programming', 3.0, 2),
-    ('CSE401', 'Artificial Intelligence', 3.0, 2);
+    ('CSE 1101', 'Introduction to Programming', 3.0, 2),
+    ('CSE 2401', 'Artificial Intelligence', 3.0, 2);

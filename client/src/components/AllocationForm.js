@@ -78,8 +78,9 @@ const AllocationForm = ({ onAllocationCreated }) => {
 
     const fetchAllocationForCourse = async (course_id) => {
         try {
-            const response = await axios.get(`http://localhost:5000/api/get-teacher-by-course/${course_id}`);
-            const { teacher_name, availability } = response.data;
+            // Fetch the teacher name
+            const response1 = await axios.get(`http://localhost:5000/api/get-teacher-by-course/${course_id}`);
+            const { teacher_name } = response1.data;
     
             if (teacher_name) {
                 const teacher = teachers.find((t) => t.name === teacher_name);
@@ -87,7 +88,6 @@ const AllocationForm = ({ onAllocationCreated }) => {
                     setFormData((prev) => ({
                         ...prev,
                         teacher_id: teacher.teacher_id,
-                        availability: availability || "Available",
                     }));
                     setIsAllocated(true);
                 }
@@ -95,14 +95,42 @@ const AllocationForm = ({ onAllocationCreated }) => {
                 setFormData((prev) => ({
                     ...prev,
                     teacher_id: "",
-                    availability: "Not Allocated",
                 }));
                 setIsAllocated(false);
             }
+    
+            // Fetch the allocation availability
+            const response2 = await axios.get(`http://localhost:5000/api/get-availability-by-course/${course_id}`);
+            const { allocation_availability } = response2.data;
+    
+            if (allocation_availability !== undefined && allocation_availability !== null) {
+                let availabilityText = "";
+                if (allocation_availability === 1) {
+                    availabilityText = "1 Slot Available";
+                } else if (allocation_availability === 2) {
+                    availabilityText = "2 Slots Available";
+                } else if (allocation_availability === 0) {
+                    availabilityText = "No Slot Available";
+                } else {
+                    availabilityText = "Unknown Availability";
+                }
+    
+                setFormData((prev) => ({
+                    ...prev,
+                    availability: availabilityText,
+                }));
+            } else {
+                setFormData((prev) => ({
+                    ...prev,
+                    availability: "Availability Data Not Found",
+                }));
+            }
+    
         } catch (err) {
             console.error("Error fetching allocation for course:", err);
         }
     };
+    
     
     const handleInputChange = (e) => {
         const { name, value } = e.target;
@@ -122,16 +150,18 @@ const AllocationForm = ({ onAllocationCreated }) => {
 
     const resetForm = () => {
         setFormData({
-            teacher_id: '',
-            course_id: '',
-            room_id: '',
-            day_id: '',
-            slot_id: ''
+            teacher_id: "",
+            course_id: "",
+            room_id: "",
+            day_id: "",
+            slot_id: "",
         });
-        setSuccess('');
-        setError('');
-        setWorkloadWarning('');
+        setSuccess("");
+        setError("");
+        setWorkloadWarning("");
+        setIsAllocated(false); // Reset allocation state
     };
+    
 
     const formatWorkloadError = (errorMessage) => {
         if (errorMessage.includes('daily workload would exceed')) {
@@ -198,6 +228,7 @@ const AllocationForm = ({ onAllocationCreated }) => {
             setIsSubmitting(false);
         }
     };
+
     return (
         <div className="mt-4">
             <h3>Create Allocation</h3>
@@ -209,7 +240,7 @@ const AllocationForm = ({ onAllocationCreated }) => {
             {error && <Alert variant="danger">{error}</Alert>}
             {workloadWarning && <Alert variant="warning">{workloadWarning}</Alert>}
             {success && <Alert variant="success">{success}</Alert>}
-
+    
             <Form onSubmit={handleSubmit}>
                 <Row>
                     <Col md={8}>
@@ -224,9 +255,15 @@ const AllocationForm = ({ onAllocationCreated }) => {
                                         (course) => course.course_id === parseInt(e.target.value)
                                     );
                                     if (selectedCourse) {
+                                        const availabilityText =
+                                            selectedCourse.allocation_availability === 1
+                                                ? "1 Slot Available"
+                                                : selectedCourse.allocation_availability === 2
+                                                ? "2 Slots Available"
+                                                : "Slot Already Allocated";
                                         setFormData((prev) => ({
                                             ...prev,
-                                            availability: selectedCourse.allocation_availability,
+                                            availability: availabilityText,
                                         }));
                                     } else {
                                         setFormData((prev) => ({
@@ -248,52 +285,6 @@ const AllocationForm = ({ onAllocationCreated }) => {
                     </Col>
                     <Col md={4}>
                         <Form.Group className="mb-3">
-                            <Form.Label>Availability</Form.Label>
-                            <Form.Control
-                                type="text"
-                                value={formData.availability || ""}
-                                readOnly
-                                placeholder="Availability will auto-fill"
-                            />
-                        </Form.Group>
-                    </Col>
-                </Row>
-
-                <Row>
-                    <Col md={6}>
-                        <Form.Group className="mb-3">
-                            <Form.Label>Teacher</Form.Label>
-                            {isAllocated ? (
-                                <Form.Control
-                                    type="text"
-                                    value={
-                                        teachers.find((teacher) => teacher.teacher_id === formData.teacher_id)?.name || ""
-                                    }
-                                    readOnly
-                                    placeholder="Teacher will auto-fill"
-                                />
-                            ) : (
-                                <Form.Select
-                                    name="teacher_id"
-                                    value={formData.teacher_id}
-                                    onChange={(e) => setFormData((prev) => ({
-                                        ...prev,
-                                        teacher_id: e.target.value,
-                                    }))}
-                                    required
-                                >
-                                    <option value="">Select Teacher</option>
-                                    {teachers.map((teacher) => (
-                                        <option key={teacher.teacher_id} value={teacher.teacher_id}>
-                                            {teacher.name}
-                                        </option>
-                                    ))}
-                                </Form.Select>
-                            )}
-                        </Form.Group>
-                    </Col>
-                    <Col md={6}>
-                        <Form.Group className="mb-3">
                             <Form.Label>Day</Form.Label>
                             <Form.Select
                                 name="day_id"
@@ -311,7 +302,59 @@ const AllocationForm = ({ onAllocationCreated }) => {
                         </Form.Group>
                     </Col>
                 </Row>
+    
+                <Row>
+                    <Col md={7}>
+                        <Form.Group className="mb-3">
+                            <Form.Label>Teacher</Form.Label>
+                            {isAllocated ? (
+                                <Form.Control
+                                    type="text"
+                                    value={
+                                        teachers.find((teacher) => teacher.teacher_id === formData.teacher_id)?.name ||
+                                        "No course selected"
+                                    }
+                                    readOnly
+                                    disabled={!formData.course_id}
+                                />
+                            ) : (
+                                <Form.Select
+                                    name="teacher_id"
+                                    value={formData.teacher_id}
+                                    onChange={(e) =>
+                                        setFormData((prev) => ({
+                                            ...prev,
+                                            teacher_id: e.target.value,
+                                        }))
+                                    }
+                                    required
+                                    disabled={!formData.course_id}
+                                >
+                                    <option value="">{!formData.course_id ? "No Course selected" : "Select a teacher"}</option>
+                                    {teachers.map((teacher) => (
+                                        <option key={teacher.teacher_id} value={teacher.teacher_id}>
+                                            {teacher.name}
+                                        </option>
+                                    ))}
+                                </Form.Select>
+                            )}
+                        </Form.Group>
+                    </Col>
 
+                    <Col md={5}>
+                        <Form.Group className="mb-3">
+                            <Form.Label>Availability</Form.Label>
+                            <Form.Control
+                                type="text"
+                                value={formData.availability || ""}
+                                readOnly
+                                placeholder="No Course selected"
+                                disabled={!formData.course_id}
+                            />
+                        </Form.Group>
+                    </Col>
+                </Row>
+    
                 <Row>
                     <Col md={6}>
                         <Form.Group className="mb-3">
@@ -331,7 +374,6 @@ const AllocationForm = ({ onAllocationCreated }) => {
                             </Form.Select>
                         </Form.Group>
                     </Col>
-
                     <Col md={6}>
                         <Form.Group className="mb-3">
                             <Form.Label>Room</Form.Label>
@@ -342,18 +384,23 @@ const AllocationForm = ({ onAllocationCreated }) => {
                                 required
                                 disabled={!formData.day_id || !formData.slot_id}
                             >
-                                <option value="">Select Room</option>
-                                {availableRooms.map((room) => (
-                                    <option key={room.room_id} value={room.room_id}>
-                                        {room.room_number} (Capacity: {room.capacity}
-                                        {room.is_lab ? ", Lab" : ""})
-                                    </option>
-                                ))}
+                                {!formData.day_id || !formData.slot_id ? (
+                                    <option value="">Time or Day unselected</option>
+                                ) : (
+                                    <>
+                                        <option value="">Select Room</option>
+                                        {availableRooms.map((room) => (
+                                            <option key={room.room_id} value={room.room_id}>
+                                                {room.room_number} (Capacity: {room.capacity})
+                                            </option>
+                                        ))}
+                                    </>
+                                )}
                             </Form.Select>
                         </Form.Group>
                     </Col>
                 </Row>
-
+    
                 <div className="d-flex justify-content-between">
                     <Button variant="primary" type="submit" disabled={isSubmitting}>
                         {isSubmitting ? "Creating..." : "Create Allocation"}
