@@ -257,7 +257,7 @@ app.get("/api/rooms", async (req, res) => {
     }
 });
 
-// Allocations routes
+// Allocations routes (creating new allocations)
 app.post("/api/allocations", async (req, res) => {
     try {
         const { teacher_id, course_id, room_id, day_id, slot_id } = req.body;
@@ -281,7 +281,37 @@ app.post("/api/allocations", async (req, res) => {
             });
         }
 
-        // Create allocation
+        // Fetch the current allocation availability for the course
+        const courseData = await pool.query(
+            "SELECT allocation_availability FROM courses WHERE course_id = $1",
+            [course_id]
+        );
+
+        if (courseData.rows.length === 0) {
+            return res.status(404).json({
+                error: "Course not found"
+            });
+        }
+
+        const currentAvailability = courseData.rows[0].allocation_availability;
+
+        // Ensure availability is sufficient
+        if (currentAvailability <= 0) {
+            return res.status(400).json({
+                error: "No available allocations remaining for this course"
+            });
+        }
+
+        // Decrease availability by 1
+        const updatedAvailability = currentAvailability - 1;
+
+        // Update the availability in the courses table
+        await pool.query(
+            "UPDATE courses SET allocation_availability = $1 WHERE course_id = $2",
+            [updatedAvailability, course_id]
+        );
+
+        // Create the allocation
         const newAllocation = await pool.query(
             `INSERT INTO allocations 
             (teacher_id, course_id, room_id, day_id, slot_id) 
@@ -313,7 +343,7 @@ app.post("/api/allocations", async (req, res) => {
         res.json(allocation.rows[0]);
     } catch (err) {
         console.error(err.message);
-        if (err.code === '23505') {
+        if (err.code === "23505") {
             res.status(400).json({
                 error: "This time slot is already allocated for the selected room or teacher"
             });

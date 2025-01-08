@@ -9,10 +9,10 @@ const RoutineView = () => {
 
     // Time slots for the table
     const timeSlots = [
-        '08:30 - 10:00',
-        '10:30 - 12:00',
-        '13:30 - 15:00',
-        '15:30 - 17:00'
+        '08:00 - 09:15',
+        '09:15 - 10:30',
+        '10:30 - 11:45',
+        '11:45 - 13:00'
     ];
 
     // Days for the table

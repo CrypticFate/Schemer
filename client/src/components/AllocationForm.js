@@ -79,40 +79,45 @@ const AllocationForm = ({ onAllocationCreated }) => {
     const fetchAllocationForCourse = async (course_id) => {
         try {
             const response = await axios.get(`http://localhost:5000/api/get-teacher-by-course/${course_id}`);
-            const { teacher_name } = response.data;
-
+            const { teacher_name, availability } = response.data;
+    
             if (teacher_name) {
-                const teacher = teachers.find(t => t.name === teacher_name);
-
+                const teacher = teachers.find((t) => t.name === teacher_name);
                 if (teacher) {
-                    setFormData(prev => ({
+                    setFormData((prev) => ({
                         ...prev,
-                        teacher_id: teacher.teacher_id
+                        teacher_id: teacher.teacher_id,
+                        availability: availability || "Available",
                     }));
                     setIsAllocated(true);
                 }
             } else {
-                setFormData(prev => ({
+                setFormData((prev) => ({
                     ...prev,
-                    teacher_id: ''
+                    teacher_id: "",
+                    availability: "Not Allocated",
                 }));
                 setIsAllocated(false);
             }
         } catch (err) {
-            console.error('Error fetching allocation for course:', err);
+            console.error("Error fetching allocation for course:", err);
         }
     };
-
+    
     const handleInputChange = (e) => {
         const { name, value } = e.target;
-        setFormData(prev => ({
+        setFormData((prev) => ({
             ...prev,
-            [name]: value
+            [name]: value,
+            ...(name === "course_id" && {
+                teacher_id: "",
+                availability: "",
+            }),
         }));
-
-        setError('');
-        setWorkloadWarning('');
-        setSuccess('');
+    
+        setError("");
+        setWorkloadWarning("");
+        setSuccess("");
     };
 
     const resetForm = () => {
@@ -193,33 +198,63 @@ const AllocationForm = ({ onAllocationCreated }) => {
             setIsSubmitting(false);
         }
     };
-
     return (
         <div className="mt-4">
             <h3>Create Allocation</h3>
-            {loadingData && <Spinner animation="border" role="status"><span className="visually-hidden">Loading...</span></Spinner>}
+            {loadingData && (
+                <Spinner animation="border" role="status">
+                    <span className="visually-hidden">Loading...</span>
+                </Spinner>
+            )}
             {error && <Alert variant="danger">{error}</Alert>}
             {workloadWarning && <Alert variant="warning">{workloadWarning}</Alert>}
             {success && <Alert variant="success">{success}</Alert>}
-            
+
             <Form onSubmit={handleSubmit}>
                 <Row>
-                    <Col md={12}>
+                    <Col md={8}>
                         <Form.Group className="mb-3">
                             <Form.Label>Course</Form.Label>
                             <Form.Select
                                 name="course_id"
                                 value={formData.course_id}
-                                onChange={handleInputChange}
+                                onChange={(e) => {
+                                    handleInputChange(e);
+                                    const selectedCourse = courses.find(
+                                        (course) => course.course_id === parseInt(e.target.value)
+                                    );
+                                    if (selectedCourse) {
+                                        setFormData((prev) => ({
+                                            ...prev,
+                                            availability: selectedCourse.allocation_availability,
+                                        }));
+                                    } else {
+                                        setFormData((prev) => ({
+                                            ...prev,
+                                            availability: "",
+                                        }));
+                                    }
+                                }}
                                 required
                             >
                                 <option value="">Select Course</option>
-                                {courses.map(course => (
+                                {courses.map((course) => (
                                     <option key={course.course_id} value={course.course_id}>
-                                        {course.course_code} - {course.course_name}
+                                        {course.course_code} - {course.course_name.slice(0, 20)} {/* Shortened name */}
                                     </option>
                                 ))}
                             </Form.Select>
+                        </Form.Group>
+                    </Col>
+                    <Col md={4}>
+                        <Form.Group className="mb-3">
+                            <Form.Label>Availability</Form.Label>
+                            <Form.Control
+                                type="text"
+                                value={formData.availability || ""}
+                                readOnly
+                                placeholder="Availability will auto-fill"
+                            />
                         </Form.Group>
                     </Col>
                 </Row>
@@ -228,23 +263,35 @@ const AllocationForm = ({ onAllocationCreated }) => {
                     <Col md={6}>
                         <Form.Group className="mb-3">
                             <Form.Label>Teacher</Form.Label>
-                            <Form.Select
-                                name="teacher_id"
-                                value={formData.teacher_id}
-                                onChange={handleInputChange}
-                                required
-                                disabled={isAllocated}
-                            >
-                                <option value="">Select Teacher</option>
-                                {teachers.map(teacher => (
-                                    <option key={teacher.teacher_id} value={teacher.teacher_id}>
-                                        {teacher.name}
-                                    </option>
-                                ))}
-                            </Form.Select>
+                            {isAllocated ? (
+                                <Form.Control
+                                    type="text"
+                                    value={
+                                        teachers.find((teacher) => teacher.teacher_id === formData.teacher_id)?.name || ""
+                                    }
+                                    readOnly
+                                    placeholder="Teacher will auto-fill"
+                                />
+                            ) : (
+                                <Form.Select
+                                    name="teacher_id"
+                                    value={formData.teacher_id}
+                                    onChange={(e) => setFormData((prev) => ({
+                                        ...prev,
+                                        teacher_id: e.target.value,
+                                    }))}
+                                    required
+                                >
+                                    <option value="">Select Teacher</option>
+                                    {teachers.map((teacher) => (
+                                        <option key={teacher.teacher_id} value={teacher.teacher_id}>
+                                            {teacher.name}
+                                        </option>
+                                    ))}
+                                </Form.Select>
+                            )}
                         </Form.Group>
                     </Col>
-
                     <Col md={6}>
                         <Form.Group className="mb-3">
                             <Form.Label>Day</Form.Label>
@@ -255,7 +302,7 @@ const AllocationForm = ({ onAllocationCreated }) => {
                                 required
                             >
                                 <option value="">Select Day</option>
-                                {days.map(day => (
+                                {days.map((day) => (
                                     <option key={day.day_id} value={day.day_id}>
                                         {day.day_name}
                                     </option>
@@ -276,7 +323,7 @@ const AllocationForm = ({ onAllocationCreated }) => {
                                 required
                             >
                                 <option value="">Select Time Slot</option>
-                                {timeSlots.map(slot => (
+                                {timeSlots.map((slot) => (
                                     <option key={slot.slot_id} value={slot.slot_id}>
                                         {slot.start_time.slice(0, -3)} - {slot.end_time.slice(0, -3)}
                                     </option>
@@ -296,9 +343,10 @@ const AllocationForm = ({ onAllocationCreated }) => {
                                 disabled={!formData.day_id || !formData.slot_id}
                             >
                                 <option value="">Select Room</option>
-                                {availableRooms.map(room => (
+                                {availableRooms.map((room) => (
                                     <option key={room.room_id} value={room.room_id}>
-                                        {room.room_number} (Capacity: {room.capacity}{room.is_lab ? ', Lab' : ''})
+                                        {room.room_number} (Capacity: {room.capacity}
+                                        {room.is_lab ? ", Lab" : ""})
                                     </option>
                                 ))}
                             </Form.Select>
@@ -307,15 +355,11 @@ const AllocationForm = ({ onAllocationCreated }) => {
                 </Row>
 
                 <div className="d-flex justify-content-between">
-                    <Button 
-                        variant="primary" 
-                        type="submit"
-                        disabled={isSubmitting}
-                    >
-                        {isSubmitting ? 'Creating...' : 'Create Allocation'}
+                    <Button variant="primary" type="submit" disabled={isSubmitting}>
+                        {isSubmitting ? "Creating..." : "Create Allocation"}
                     </Button>
-                    <Button 
-                        variant="secondary" 
+                    <Button
+                        variant="secondary"
                         type="button"
                         onClick={resetForm}
                         disabled={isSubmitting}

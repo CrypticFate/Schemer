@@ -75,6 +75,24 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+--- Triggers to enforce allocation_availability
+CREATE OR REPLACE FUNCTION check_course_allocation_availability()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF (SELECT COUNT(*) FROM allocations WHERE course_id = NEW.course_id) >= 
+       (SELECT allocation_availability FROM courses WHERE course_id = NEW.course_id) THEN
+        RAISE EXCEPTION 'Course allocation limit exceeded';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_check_course_allocation
+BEFORE INSERT ON allocations
+FOR EACH ROW
+EXECUTE FUNCTION check_course_allocation_availability();
+
+
 -- Create a function to check room availability using cursors
 CREATE OR REPLACE FUNCTION check_room_availability() 
 RETURNS TRIGGER AS $$
@@ -156,8 +174,8 @@ BEGIN
     END IF;
     RETURN NULL;
 END;
-$$ LANGUAGE plpgsql;
 
+$$ LANGUAGE plpgsql;
 -- Create triggers
 DROP TRIGGER IF EXISTS check_teacher_workload_trigger ON allocations;
 CREATE TRIGGER check_teacher_workload_trigger
