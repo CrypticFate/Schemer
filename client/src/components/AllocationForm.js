@@ -230,7 +230,7 @@ const AllocationForm = ({ onAllocationCreated }) => {
     };
 
     return (
-        <div className="mt-4">
+        <div className="mt-4 smaller-text">
             <h3>Create Allocation</h3>
             {loadingData && (
                 <Spinner animation="border" role="status">
@@ -277,7 +277,7 @@ const AllocationForm = ({ onAllocationCreated }) => {
                                 <option value="">Select Course</option>
                                 {courses.map((course) => (
                                     <option key={course.course_id} value={course.course_id}>
-                                        {course.course_code} - {course.course_name.slice(0, 20)} {/* Shortened name */}
+                                        {course.course_code}-{course.course_name.slice(0, 30)} {/* Shortened name */}
                                     </option>
                                 ))}
                             </Form.Select>

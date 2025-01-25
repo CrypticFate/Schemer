@@ -24,6 +24,10 @@
   color: white;
 }
 
+.smaller-text {
+  font-size: 0.9rem; /* Adjust the value for desired size */
+}
+
 .App-link {
   color: #61dafb;
 }
