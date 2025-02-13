@@ -109,7 +109,17 @@ const AllocationForm = ({ onAllocationCreated }) => {
                     availabilityText = "1 Slot Available";
                 } else if (allocation_availability === 2) {
                     availabilityText = "2 Slots Available";
-                } else if (allocation_availability === 0) {
+                    
+                } else if (allocation_availability === 3) {
+                    availabilityText = "3 Slots Available";
+                } else if (allocation_availability === 4) {
+                    availabilityText = "4 Slots Available";
+                } else if (allocation_availability === 5) {
+                    availabilityText = "5 Slots Available";
+                } else if (allocation_availability === 6) {
+                    availabilityText = "6 Slots Available";
+                }
+                else if (allocation_availability === 0) {
                     availabilityText = "No Slot Available";
                 } else {
                     availabilityText = "Unknown Availability";

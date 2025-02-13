@@ -22,7 +22,7 @@ CREATE TABLE courses (
     course_code VARCHAR(20) UNIQUE NOT NULL,
     course_name VARCHAR(100) NOT NULL,
     credit_hours DECIMAL(3,1) NOT NULL CHECK (credit_hours > 0 and credit_hours <= 3),
-    allocation_availability INTEGER NOT NULL CHECK (allocation_availability > 0 and allocation_availability < 3)
+    allocation_availability INTEGER NOT NULL 
 );
 
 -- Rooms Table

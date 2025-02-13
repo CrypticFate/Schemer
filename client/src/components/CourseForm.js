@@ -7,6 +7,17 @@ const CourseForm = () => {
     const [creditHours, setCreditHours] = useState('');
     const [programName, setProgramName] = useState('');
 
+    const programMap = {
+        'CSE': 2,
+        'SWE': 1,
+        'EEE': 3,
+        'ME': 2,
+        'IPE': 1,
+        'CEE': 1,
+        'BTM': 1,
+        // ...other programs
+    };
+
     const onSubmitForm = async (e) => {
         e.preventDefault();
         try {
@@ -14,7 +25,8 @@ const CourseForm = () => {
                 course_code: courseCode,
                 course_name: courseName,
                 credit_hours: parseFloat(creditHours),
-                program_name: programName
+                program_name: programName,
+                program_value: programMap[programName] || 1 // Default to 1 if not found
             };
             const response = await fetch('http://localhost:5000/api/courses', {
                 method: 'POST',

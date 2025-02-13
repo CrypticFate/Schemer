@@ -216,7 +216,7 @@ app.get("/api/courses", async (req, res) => {
 // Create course
 app.post("/api/courses", async (req, res) => {
     try {
-        const { course_code, course_name, credit_hours } = req.body;
+        const { course_code, course_name, credit_hours, program_value } = req.body;
 
         // Validate required fields
         if (!course_code) {
@@ -241,7 +241,8 @@ app.post("/api/courses", async (req, res) => {
                 error: "Credit hours must be greater than 0"
             });
         }
-        const allocationAvailability = credit_hours === 1.5 ? 1 : credit_hours === 3 ? 2 : null;
+
+        const allocationAvailability = (credit_hours === 1.5 ? 1 : credit_hours === 3 ? 2 : null) * program_value;
 
         if (allocationAvailability === null) {
             throw new Error("Invalid credit hours provided. Only 1.5 and 3 are allowed.");
