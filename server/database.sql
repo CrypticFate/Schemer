@@ -22,6 +22,7 @@ CREATE TABLE courses (
     course_code VARCHAR(20) UNIQUE NOT NULL,
     course_name VARCHAR(100) NOT NULL,
     credit_hours DECIMAL(3,1) NOT NULL CHECK (credit_hours > 0 and credit_hours <= 3),
+    program VARCHAR(10) NOT NULL,
     allocation_availability INTEGER NOT NULL 
 );
 
@@ -61,6 +62,8 @@ CREATE TABLE allocations (
     room_id INTEGER REFERENCES rooms(room_id) ON DELETE CASCADE,
     day_id INTEGER REFERENCES days(day_id) ON DELETE CASCADE,
     slot_id INTEGER REFERENCES time_slots(slot_id) ON DELETE CASCADE,
+    program VARCHAR(10) NOT NULL,
+    section INTEGER NOT NULL CHECK (section > 0),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(room_id, day_id, slot_id),
     UNIQUE(teacher_id, day_id, slot_id)
@@ -222,7 +225,114 @@ INSERT INTO teachers (name, email) VALUES
     ('Prof. Amanda White', 'amanda.white@university.edu');
 
 -- Insert sample courses
-INSERT INTO courses (course_code, course_name, credit_hours, allocation_availability) VALUES
+INSERT INTO courses (course_code, course_name, credit_hours, program, allocation_availability) VALUES
     -- Computer Science Courses
-    ('CSE 1101', 'Introduction to Programming', 3.0, 2),
-    ('CSE 2401', 'Artificial Intelligence', 3.0, 2);
+    ('CSE 1101', 'Introduction to Programming', 3.0, 'CSE', 2),
+    -- Software Engineering Courses
+    ('SWE 1101', 'Software Development Fundamentals', 3.0, 'SWE', 1),
+    -- Electrical Engineering Courses
+    ('EEE 1101', 'Basic Electrical Engineering', 3.0, 'EEE', 3),
+    -- Mechanical Engineering Courses
+    ('ME 1101', 'Engineering Mechanics', 3.0, 'ME', 2),
+    -- Industrial Engineering Courses
+    ('IPE 1101', 'Industrial Process', 1.5, 'IPE', 1),
+    -- Civil Engineering Courses
+    ('CEE 1101', 'Structural Analysis', 3.0, 'CEE', 2),
+    -- Business Technology Management Courses
+    ('BTM 1101', 'Business Analytics', 1.5, 'BTM', 1);
+
+-- Function to check section allocation availability
+CREATE OR REPLACE FUNCTION get_available_sections(p_course_id INTEGER)
+RETURNS TABLE (
+    section_number INTEGER,
+    allocations_count BIGINT,
+    max_allocations INTEGER
+) AS $$
+DECLARE
+    course_credits DECIMAL;
+    max_slots INTEGER;
+BEGIN
+    -- Get course credits
+    SELECT credit_hours INTO course_credits
+    FROM courses
+    WHERE course_id = p_course_id;
+
+    -- Calculate max slots per section (credit_hours / 1.5)
+    max_slots := CEIL(course_credits / 1.5);
+
+    -- Get allocation counts for each section using CUBE for advanced aggregation
+    RETURN QUERY
+    WITH section_counts AS (
+        SELECT 
+            section,
+            COUNT(*) as allocation_count
+        FROM allocations
+        WHERE course_id = p_course_id
+        GROUP BY CUBE(section)
+    ),
+    program_sections AS (
+        SELECT 
+            generate_series(1, 
+                CASE 
+                    WHEN c.program = 'CSE' THEN 2
+                    WHEN c.program = 'SWE' THEN 1
+                    WHEN c.program = 'EEE' THEN 3
+                    WHEN c.program = 'ME' THEN 2
+                    WHEN c.program = 'IPE' THEN 1
+                    WHEN c.program = 'CEE' THEN 3
+                    WHEN c.program = 'BTM' THEN 1
+                    ELSE 0
+                END
+            ) as section_number
+        FROM courses c
+        WHERE c.course_id = p_course_id
+    )
+    SELECT 
+        ps.section_number,
+        COALESCE(sc.allocation_count, 0),
+        max_slots
+    FROM program_sections ps
+    LEFT JOIN section_counts sc ON ps.section_number = sc.section
+    WHERE COALESCE(sc.allocation_count, 0) < max_slots;
+
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger function to check section allocation limit
+CREATE OR REPLACE FUNCTION check_section_allocation_limit()
+RETURNS TRIGGER AS $$
+DECLARE
+    current_count INTEGER;
+    max_slots INTEGER;
+    course_credits DECIMAL;
+BEGIN
+    -- Get course credits
+    SELECT credit_hours INTO course_credits
+    FROM courses
+    WHERE course_id = NEW.course_id;
+
+    -- Calculate max slots
+    max_slots := CEIL(course_credits / 1.5);
+
+    -- Get current allocation count for this section
+    SELECT COUNT(*)
+    INTO current_count
+    FROM allocations
+    WHERE course_id = NEW.course_id
+    AND section = NEW.section;
+
+    IF current_count >= max_slots THEN
+        RAISE EXCEPTION 'Section % has reached maximum allocation limit of % slots', 
+            NEW.section, max_slots;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger
+DROP TRIGGER IF EXISTS check_section_allocation_limit_trigger ON allocations;
+CREATE TRIGGER check_section_allocation_limit_trigger
+    BEFORE INSERT ON allocations
+    FOR EACH ROW
+    EXECUTE FUNCTION check_section_allocation_limit();

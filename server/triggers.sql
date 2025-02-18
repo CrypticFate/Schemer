@@ -79,9 +79,9 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION check_course_allocation_availability()
 RETURNS TRIGGER AS $$
 BEGIN
-    IF (SELECT COUNT(*) FROM allocations WHERE course_id = NEW.course_id) >= 
-       (SELECT allocation_availability FROM courses WHERE course_id = NEW.course_id) THEN
-        RAISE EXCEPTION 'Course allocation limit exceeded';
+    -- Check if the course has any available slots
+    IF (SELECT allocation_availability FROM courses WHERE course_id = NEW.course_id) <= 0 THEN
+        RAISE EXCEPTION 'Cannot allocate course: No slots available for this course';
     END IF;
     RETURN NEW;
 END;
