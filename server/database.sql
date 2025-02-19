@@ -77,6 +77,8 @@ CREATE TABLE routine (
     course_code VARCHAR(20),
     room_number VARCHAR(10),
     teacher_name VARCHAR(100),
+    program VARCHAR(10) NOT NULL,
+    section INTEGER NOT NULL CHECK (section > 0),
     UNIQUE(day_id, slot_id, room_number)
 );
 
@@ -106,6 +108,28 @@ INSERT INTO rooms (room_number, capacity, is_lab) VALUES
     ('510', 60, false),
     ('L-1', 30, True), 
     ('L-2', 30, True);  
+
+-- Insert sample teachers
+INSERT INTO teachers (name, email) VALUES
+    ('Dr. John Smith', 'john.smith@university.edu'),
+    ('Prof. Amanda White', 'amanda.white@university.edu');
+
+-- Insert sample courses
+INSERT INTO courses (course_code, course_name, credit_hours, program, allocation_availability) VALUES
+    -- Computer Science Courses
+    ('CSE 1101', 'Introduction to Programming', 3.0, 'CSE', 2),
+    -- Software Engineering Courses
+    ('SWE 1101', 'Software Development Fundamentals', 3.0, 'SWE', 1),
+    -- Electrical Engineering Courses
+    ('EEE 1101', 'Basic Electrical Engineering', 3.0, 'EEE', 3),
+    -- Mechanical Engineering Courses
+    ('ME 1101', 'Engineering Mechanics', 3.0, 'ME', 2),
+    -- Industrial Engineering Courses
+    ('IPE 1101', 'Industrial Process', 1.5, 'IPE', 1),
+    -- Civil Engineering Courses
+    ('CEE 1101', 'Structural Analysis', 3.0, 'CEE', 2),
+    -- Business Technology Management Courses
+    ('BTM 1101', 'Business Analytics', 1.5, 'BTM', 1);
 
 -- Drop existing function if exists
 DROP FUNCTION IF EXISTS get_available_rooms(INTEGER, INTEGER);
@@ -163,13 +187,15 @@ BEGIN
     TRUNCATE TABLE routine;
     
     -- Insert new routine data from allocations
-    INSERT INTO routine (day_id, slot_id, course_code, room_number, teacher_name)
+    INSERT INTO routine (day_id, slot_id, course_code, room_number, teacher_name, program, section)
     SELECT 
         a.day_id,
         a.slot_id,
         c.course_code,
         r.room_number,
-        t.name as teacher_name
+        t.name as teacher_name,
+        a.program,
+        a.section
     FROM allocations a
     JOIN courses c ON a.course_id = c.course_id
     JOIN rooms r ON a.room_id = r.room_id
@@ -196,7 +222,7 @@ CREATE TRIGGER allocation_changes_update_routine
     EXECUTE FUNCTION update_routine_on_allocation_change();
 
 -- Function to get formatted routine
-CREATE OR REPLACE FUNCTION get_formatted_routine()
+CREATE OR REPLACE FUNCTION get_formatted_routine(selProgram TEXT, selSection INT)
 RETURNS TABLE (
     day_name VARCHAR(10),
     time_slot TEXT,
@@ -215,31 +241,10 @@ BEGIN
     FROM routine r
     JOIN days d ON r.day_id = d.day_id
     JOIN time_slots ts ON r.slot_id = ts.slot_id
+    WHERE r.program = selProgram AND r.section = selSection
     ORDER BY d.day_order, ts.slot_order;
 END;
 $$ LANGUAGE plpgsql;
-
--- Insert sample teachers
-INSERT INTO teachers (name, email) VALUES
-    ('Dr. John Smith', 'john.smith@university.edu'),
-    ('Prof. Amanda White', 'amanda.white@university.edu');
-
--- Insert sample courses
-INSERT INTO courses (course_code, course_name, credit_hours, program, allocation_availability) VALUES
-    -- Computer Science Courses
-    ('CSE 1101', 'Introduction to Programming', 3.0, 'CSE', 2),
-    -- Software Engineering Courses
-    ('SWE 1101', 'Software Development Fundamentals', 3.0, 'SWE', 1),
-    -- Electrical Engineering Courses
-    ('EEE 1101', 'Basic Electrical Engineering', 3.0, 'EEE', 3),
-    -- Mechanical Engineering Courses
-    ('ME 1101', 'Engineering Mechanics', 3.0, 'ME', 2),
-    -- Industrial Engineering Courses
-    ('IPE 1101', 'Industrial Process', 1.5, 'IPE', 1),
-    -- Civil Engineering Courses
-    ('CEE 1101', 'Structural Analysis', 3.0, 'CEE', 2),
-    -- Business Technology Management Courses
-    ('BTM 1101', 'Business Analytics', 1.5, 'BTM', 1);
 
 -- Function to check section allocation availability
 CREATE OR REPLACE FUNCTION get_available_sections(p_course_id INTEGER)

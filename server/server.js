@@ -529,7 +529,14 @@ app.delete("/api/allocations/:id", async (req, res) => {
 // Get routine
 app.get("/api/routine", async (req, res) => {
   try {
-    const routine = await pool.query("SELECT * FROM get_formatted_routine()");
+    // Parameters from routineview.js
+    const {program, section} = req.query;
+
+    if(!program || !section){
+      return res.status(400).json({error: "Program and Section are required"});
+    }
+
+    const routine = await pool.query("SELECT * FROM get_formatted_routine($1, $2)", [program, section]);
 
     // Transform the data into a structured format
     const formattedRoutine = routine.rows.reduce((acc, row) => {
