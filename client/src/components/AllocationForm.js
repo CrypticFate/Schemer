@@ -118,8 +118,8 @@ const AllocationForm = ({ onAllocationCreated }) => {
             {
               params: {
                 course_id,
-                section: selectedSection
-              }
+                section: selectedSection,
+              },
             }
           );
           setAvailableDays(availableDaysResponse.data);
@@ -158,7 +158,9 @@ const AllocationForm = ({ onAllocationCreated }) => {
         ]);
 
       setTeachers(teachersRes.data);
-      setCourses(coursesRes.data);
+      setCourses(
+        coursesRes.data.filter((course) => course.allocation_availability > 0)
+      );
       setDays(daysRes.data);
       setTimeSlots(timeSlotsRes.data);
     } catch (err) {
@@ -250,18 +252,18 @@ const AllocationForm = ({ onAllocationCreated }) => {
     const selectedValue = e.target.value;
     console.log("Selected section value:", selectedValue);
     setSection(selectedValue);
-    
+
     // Reset day selection when section changes
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      day_id: ""
+      day_id: "",
     }));
 
     // Fetch available days if course is selected
     if (formData.course_id && selectedValue) {
       fetchAllocationForCourse(formData.course_id, selectedValue);
     }
-    
+
     setError("");
     setWorkloadWarning("");
   };
@@ -435,7 +437,7 @@ const AllocationForm = ({ onAllocationCreated }) => {
               >
                 <option value="">Select Day</option>
                 {days
-                  .filter(day => availableDays.includes(day.day_id))
+                  .filter((day) => availableDays.includes(day.day_id))
                   .map((day) => (
                     <option key={day.day_id} value={day.day_id}>
                       {day.day_name}
