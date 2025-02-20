@@ -29,6 +29,9 @@ const AllocationForm = ({ onAllocationCreated }) => {
 
   const [availableSections, setAvailableSections] = useState([]);
 
+  // Add new state for available days
+  const [availableDays, setAvailableDays] = useState([]);
+
   const loadAvailableRooms = useCallback(async () => {
     try {
       const response = await axios.get(
@@ -48,7 +51,7 @@ const AllocationForm = ({ onAllocationCreated }) => {
   }, [formData.day_id, formData.slot_id]);
 
   const fetchAllocationForCourse = useCallback(
-    async (course_id) => {
+    async (course_id, selectedSection) => {
       try {
         // Get teacher allocation first
         const response1 = await axios.get(
@@ -107,11 +110,25 @@ const AllocationForm = ({ onAllocationCreated }) => {
             availability: availabilityText,
           }));
         }
+
+        // If section is selected, fetch available days
+        if (selectedSection) {
+          const availableDaysResponse = await axios.get(
+            `http://localhost:5000/api/available-days`,
+            {
+              params: {
+                course_id,
+                section: selectedSection
+              }
+            }
+          );
+          setAvailableDays(availableDaysResponse.data);
+        }
       } catch (err) {
         console.error("Error fetching allocation for course:", err);
       }
     },
-    [teachers] // Remove section from dependencies
+    [teachers]
   );
 
   useEffect(() => {
@@ -120,9 +137,9 @@ const AllocationForm = ({ onAllocationCreated }) => {
 
   useEffect(() => {
     if (formData.course_id) {
-      fetchAllocationForCourse(formData.course_id);
+      fetchAllocationForCourse(formData.course_id, section);
     }
-  }, [formData.course_id, fetchAllocationForCourse]);
+  }, [formData.course_id, fetchAllocationForCourse, section]);
 
   useEffect(() => {
     if (formData.day_id && formData.slot_id) {
@@ -232,11 +249,19 @@ const AllocationForm = ({ onAllocationCreated }) => {
   const handleSectionChange = (e) => {
     const selectedValue = e.target.value;
     console.log("Selected section value:", selectedValue);
-
-    // Update only the section value
     setSection(selectedValue);
+    
+    // Reset day selection when section changes
+    setFormData(prev => ({
+      ...prev,
+      day_id: ""
+    }));
 
-    // Don't clear other form values
+    // Fetch available days if course is selected
+    if (formData.course_id && selectedValue) {
+      fetchAllocationForCourse(formData.course_id, selectedValue);
+    }
+    
     setError("");
     setWorkloadWarning("");
   };
@@ -406,13 +431,16 @@ const AllocationForm = ({ onAllocationCreated }) => {
                 value={formData.day_id}
                 onChange={handleInputChange}
                 required
+                disabled={!section} // Disable if no section is selected
               >
                 <option value="">Select Day</option>
-                {days.map((day) => (
-                  <option key={day.day_id} value={day.day_id}>
-                    {day.day_name}
-                  </option>
-                ))}
+                {days
+                  .filter(day => availableDays.includes(day.day_id))
+                  .map((day) => (
+                    <option key={day.day_id} value={day.day_id}>
+                      {day.day_name}
+                    </option>
+                  ))}
               </Form.Select>
             </Form.Group>
           </Col>

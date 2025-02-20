@@ -598,6 +598,37 @@ app.get("/api/courses/:course_id/available-sections", async (req, res) => {
   }
 });
 
+// Add this new endpoint
+app.get("/api/available-days", async (req, res) => {
+  try {
+    const { course_id, section } = req.query;
+
+    // Get all allocated days for this course and section
+    const allocatedDays = await pool.query(
+      `SELECT DISTINCT day_id 
+       FROM allocations 
+       WHERE course_id = $1 AND section = $2`,
+      [course_id, section]
+    );
+
+    // Get all days
+    const allDays = await pool.query(
+      "SELECT day_id FROM days ORDER BY day_order"
+    );
+
+    // Filter out allocated days
+    const allocatedDayIds = allocatedDays.rows.map(row => row.day_id);
+    const availableDayIds = allDays.rows
+      .map(row => row.day_id)
+      .filter(dayId => !allocatedDayIds.includes(dayId));
+
+    res.json(availableDayIds);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 const port = process.env.PORT || 5000;
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
