@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
-import { Table, Container, Alert, Spinner, Form, Row, Col } from 'react-bootstrap';
+import { Table, Container, Alert, Spinner, Form, Row, Col, Button } from 'react-bootstrap';
+import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
 
 const RoutineView = () => {
     const [routine, setRoutine] = useState(null);
@@ -14,35 +16,67 @@ const RoutineView = () => {
         "CSE": 2, "SWE": 1, "EEE": 3, "ME": 2, "IPE": 1, "CEE": 3, "BTM": 1
     };
 
+    const routineImage = () => {
+        const element = document.getElementById("routine-table");
+
+        html2canvas(element, {scale: 4}).then((canvas) => {
+            const link = document.createElement("a");
+            link.href = canvas.toDataURL("image/png");
+            console.log("Selected Section:", selectedSection);
+            link.download = `${selectedProgram} - routine(Sec - ${selectedSection}).png`;
+            link.click();
+        });
+    };
+
+    const routinePDF = async () => {
+        const element = document.getElementById("routine-table");
+
+        html2canvas(element, {scale: 4}).then((canvas) => {
+            const imgData = canvas.toDataURL("image/png");
+            const pdf = new jsPDF("l", "mm", "a4");
+            const pdfWidth = 297; 
+            const pdfHeight = 210; 
+            
+            const imgWidth = pdfWidth;
+            const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+            const yPos = (pdfHeight - imgHeight) / 2;
+
+            pdf.addImage(imgData, "PNG", 0, yPos, imgWidth, imgHeight);
+            pdf.save(`${selectedProgram} - routine(Sec - ${selectedSection}).pdf`);
+
+        })
+    }
+
     const sections = selectedProgram ? Array.from({ length: programs[selectedProgram] }, (_, i) => i + 1) : [];
 
     const timeSlots = ['08:00 - 09:15', '09:15 - 10:30', '10:30 - 11:45', '11:45 - 13:00'];
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
 
-    useEffect(() => {
+    const fetchRoutine = useCallback(async () => {
         if (selectedProgram && selectedSection) {
-            fetchRoutine();
+            try {
+                setLoading(true);
+                const response = await axios.get(`http://localhost:5000/api/routine/`, {
+                    params: {
+                        program: selectedProgram,
+                        section: selectedSection
+                    }
+                });
+                setRoutine(response.data);
+                setError('');
+            } catch (err) {
+                setError('Error fetching routine data');
+                console.error(err);
+            } finally {
+                setLoading(false);
+            }
         }
     }, [selectedProgram, selectedSection]);
 
-    const fetchRoutine = async () => {
-        try {
-            setLoading(true);
-            const response = await axios.get(`http://localhost:5000/api/routine/`,{
-                params: {
-                    program: selectedProgram,
-                    section: selectedSection
-                }
-            });
-            setRoutine(response.data);
-            setError('');
-        } catch (err) {
-            setError('Error fetching routine data');
-            console.error(err);
-        } finally {
-            setLoading(false);
-        }
-    };
+    useEffect(() => {
+        fetchRoutine();
+    }, [fetchRoutine]);
 
     const getCellContent = (day, timeSlot) => {
         if (!routine || !routine[day] || !routine[day][timeSlot]) {
@@ -66,7 +100,7 @@ const RoutineView = () => {
                             <Form.Label>Program</Form.Label>
                             <Form.Select value={selectedProgram} onChange={(e) => {
                                 setSelectedProgram(e.target.value);
-                                setSelectedSection(''); // Reset section when program changes
+                                setSelectedSection(''); 
                                 setRoutine(null);
                             }}>
                             <option value="">-- Select Program --</option>
@@ -104,7 +138,8 @@ const RoutineView = () => {
                 </Container>
             )}
             {routine && (
-                <div className="table-responsive">
+                <>
+                <div className="table-responsive" id = "routine-table">
                     <Table bordered hover className="routine-table">
                         <thead className="table-dark">
                             <tr>
@@ -128,7 +163,18 @@ const RoutineView = () => {
                         </tbody>
                     </Table>
                 </div>
+
+                <div>
+                <Button variant = "primary" className = "me-3" onClick = {routineImage}>
+                    Download Image
+                </Button>
+                <Button variant = "success" onClick = {routinePDF}>
+                    Download PDF
+                </Button>
+                </div>
+                </>
             )}
+
             <style>
                 {`
                     .routine-table {
