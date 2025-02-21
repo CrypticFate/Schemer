@@ -12,6 +12,7 @@ import {
 const AuthContext = createContext({
   currentUser: null,
   userRole: null,
+  setUserRole: () => {},
   signup: () => Promise,
   login: () => Promise,
   logout: () => Promise,
@@ -72,17 +73,19 @@ export function AuthProvider({ children }) {
   }
 
   // Google Sign In function
-  async function googleSignIn(response) {
+  async function googleSignIn(skipRoleAssignment = false) {
     try {
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
 
-      // Check email domain for teacher role (you can modify this logic)
-      const isTeacher = result.user.email.endsWith("@teacher.university.edu");
-      const role = isTeacher ? "teacher" : "student";
+      if (!skipRoleAssignment) {
+        // This will only run if we're not handling role selection in the Login component
+        const isTeacher = result.user.email.endsWith("@teacher.university.edu");
+        const role = isTeacher ? "teacher" : "student";
+        localStorage.setItem("userRole", role);
+        setUserRole(role);
+      }
 
-      localStorage.setItem("userRole", role);
-      setUserRole(role);
       return result;
     } catch (error) {
       throw error;
@@ -105,6 +108,7 @@ export function AuthProvider({ children }) {
   const value = {
     currentUser,
     userRole,
+    setUserRole,
     signup,
     login,
     logout,
