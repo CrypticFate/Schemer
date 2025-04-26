@@ -724,6 +724,8 @@ app.get("/api/available-time-slots", async (req, res) => {
   }
 });
 
+// // /// // // /// // // /// // // /// // // /// // // /// // // /// 
+
 // Add this new endpoint before the last app.listen line
 app.get("/api/teachers-with-allocations", async (req, res) => {
   try {
@@ -768,6 +770,8 @@ app.get("/api/teachers/:teacherId/routine", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+// // /// // // /// // // /// // // /// // // /// // // /// // // /// 
+
 
 const port = process.env.PORT || 5000;
 app.listen(port, () => {
