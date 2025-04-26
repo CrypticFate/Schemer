@@ -39,6 +39,12 @@ function NavigationBar() {
                 <Nav.Link as={Link} to="/teacher-routine">
                   Teacher's Routine
                 </Nav.Link>
+                <Nav.Link as={Link} to="/add-course">
+                  Add Course
+                </Nav.Link>
+                <Nav.Link as={Link} to="/add-teacher">
+                  Add Teacher
+                </Nav.Link>
               </>
             )}
           </Nav>
@@ -80,14 +86,28 @@ function App() {
                   <PrivateRoute requiredRole="admin">
                     <div className="row">
                       <div className="col-md-6">
-                        <TeacherForm />
-                        <CourseForm />
                         <AllocationForm />
                       </div>
                       <div className="col-md-6">
                         <AllocationList />
                       </div>
                     </div>
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/add-course"
+                element={
+                  <PrivateRoute requiredRole="admin">
+                    <CourseForm />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/add-teacher"
+                element={
+                  <PrivateRoute requiredRole="admin">
+                    <TeacherForm />
                   </PrivateRoute>
                 }
               />
