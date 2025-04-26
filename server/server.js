@@ -325,6 +325,48 @@ app.get("/api/rooms", async (req, res) => {
   }
 });
 
+// Add these validation functions before the allocations POST route
+const validateTeacherConstraints = async (client, teacher_id, day_id) => {
+  // Check consecutive hours
+  const teacherSlots = await client.query(
+    `SELECT ts.slot_order 
+     FROM allocations a
+     JOIN time_slots ts ON a.slot_id = ts.slot_id
+     WHERE a.teacher_id = $1 AND a.day_id = $2
+     ORDER BY ts.slot_order`,
+    [teacher_id, day_id]
+  );
+
+  if (teacherSlots.rows.length >= 3) {
+    throw new Error(
+      "Teacher cannot be allocated more than 3 consecutive time slots in a day"
+    );
+  }
+};
+
+const validateRoomConstraints = async (client, room_id, program, section) => {
+  // Check room capacity against section size
+  const room = await client.query(
+    "SELECT capacity FROM rooms WHERE room_id = $1",
+    [room_id]
+  );
+
+  const expectedSize =
+    program === "CSE"
+      ? 60
+      : program === "EEE"
+      ? 55
+      : program === "ME"
+      ? 50
+      : 40;
+
+  if (room.rows[0].capacity < expectedSize) {
+    throw new Error(
+      `Room capacity (${room.rows[0].capacity}) is insufficient for ${program} section ${section} (requires ${expectedSize} seats)`
+    );
+  }
+};
+
 // Allocations routes (creating new allocations)
 app.post("/api/allocations", async (req, res) => {
   const client = await pool.connect();
@@ -366,6 +408,10 @@ app.post("/api/allocations", async (req, res) => {
     if (availableRooms.rows.length === 0) {
       throw new Error("Selected room is not available for this time slot");
     }
+
+    // Additional constraints
+    await validateTeacherConstraints(client, teacher_id, day_id);
+    await validateRoomConstraints(client, room_id, program, section);
 
     // Create the allocation first to trigger any constraint checks
     const newAllocation = await client.query(
@@ -410,14 +456,21 @@ app.post("/api/allocations", async (req, res) => {
     await client.query("ROLLBACK");
 
     console.error(err.message);
-    if (err.message.includes("Cannot allocate course: No slots available")) {
+    if (err.message.includes("consecutive time slots")) {
+      res.status(400).json({
+        error: err.message,
+      });
+    } else if (err.message.includes("room capacity")) {
+      res.status(400).json({
+        error: err.message,
+      });
+    } else if (err.message.includes("Cannot allocate course")) {
       res.status(400).json({
         error: "No slots available for this course",
       });
     } else if (err.code === "23505") {
       res.status(400).json({
-        error:
-          "This time slot is already allocated for the selected room or teacher",
+        error: "This time slot is already allocated for the selected teacher",
       });
     } else {
       res.status(500).json({
@@ -530,13 +583,18 @@ app.delete("/api/allocations/:id", async (req, res) => {
 app.get("/api/routine", async (req, res) => {
   try {
     // Parameters from routineview.js
-    const {program, section} = req.query;
+    const { program, section } = req.query;
 
-    if(!program || !section){
-      return res.status(400).json({error: "Program and Section are required"});
+    if (!program || !section) {
+      return res
+        .status(400)
+        .json({ error: "Program and Section are required" });
     }
 
-    const routine = await pool.query("SELECT * FROM get_formatted_routine($1, $2)", [program, section]);
+    const routine = await pool.query(
+      "SELECT * FROM get_formatted_routine($1, $2)",
+      [program, section]
+    );
 
     // Transform the data into a structured format
     const formattedRoutine = routine.rows.reduce((acc, row) => {
@@ -617,12 +675,49 @@ app.get("/api/available-days", async (req, res) => {
     );
 
     // Filter out allocated days
-    const allocatedDayIds = allocatedDays.rows.map(row => row.day_id);
+    const allocatedDayIds = allocatedDays.rows.map((row) => row.day_id);
     const availableDayIds = allDays.rows
-      .map(row => row.day_id)
-      .filter(dayId => !allocatedDayIds.includes(dayId));
+      .map((row) => row.day_id)
+      .filter((dayId) => !allocatedDayIds.includes(dayId));
 
     res.json(availableDayIds);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Add this new endpoint before the last app.listen line
+app.get("/api/available-time-slots", async (req, res) => {
+  try {
+    const { section, day_id, program } = req.query;
+
+    if (!section || !day_id || !program) {
+      return res
+        .status(400)
+        .json({ error: "Section, day_id and program are required" });
+    }
+
+    // Get all time slots
+    const allTimeSlots = await pool.query(
+      "SELECT * FROM time_slots ORDER BY slot_order"
+    );
+
+    // Get allocated time slots for this section and day
+    const allocatedSlots = await pool.query(
+      `SELECT DISTINCT slot_id 
+       FROM allocations 
+       WHERE section = $1 AND day_id = $2 AND program = $3`,
+      [section, day_id, program]
+    );
+
+    // Filter out allocated slots
+    const allocatedSlotIds = allocatedSlots.rows.map((row) => row.slot_id);
+    const availableSlots = allTimeSlots.rows.filter(
+      (slot) => !allocatedSlotIds.includes(slot.slot_id)
+    );
+
+    res.json(availableSlots);
   } catch (err) {
     console.error(err.message);
     res.status(500).json({ error: "Server error" });

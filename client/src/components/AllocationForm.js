@@ -28,6 +28,7 @@ const AllocationForm = ({ onAllocationCreated }) => {
   const [section, setSection] = useState("");
 
   const [availableSections, setAvailableSections] = useState([]);
+  const [availableTimeSlots, setAvailableTimeSlots] = useState([]);
 
   // Add new state for available days
   const [availableDays, setAvailableDays] = useState([]);
@@ -85,7 +86,16 @@ const AllocationForm = ({ onAllocationCreated }) => {
               teacher_id: teacher.teacher_id,
             }));
             setIsAllocated(true);
+          } else {
+            setIsAllocated(false);
           }
+        } else {
+          // Reset teacher selection for new courses
+          setIsAllocated(false);
+          setFormData((prev) => ({
+            ...prev,
+            teacher_id: "",
+          }));
         }
 
         // Get availability
@@ -183,6 +193,18 @@ const AllocationForm = ({ onAllocationCreated }) => {
         availability: "",
       }));
       setSection(""); // Only reset section when course changes
+    } else if (name === "day_id") {
+      // When day changes, reset slot_id and room_id
+      setFormData((prev) => ({
+        ...prev,
+        [name]: value,
+        slot_id: "",
+        room_id: "",
+      }));
+      // Fetch available time slots when day is selected
+      if (value && section && program) {
+        fetchAvailableTimeSlots(value, section, program);
+      }
     } else {
       setFormData((prev) => ({
         ...prev,
@@ -193,6 +215,29 @@ const AllocationForm = ({ onAllocationCreated }) => {
     setError("");
     setWorkloadWarning("");
     setSuccess("");
+  };
+
+  const fetchAvailableTimeSlots = async (
+    dayId,
+    selectedSection,
+    selectedProgram
+  ) => {
+    try {
+      const response = await axios.get(
+        "http://localhost:5000/api/available-time-slots",
+        {
+          params: {
+            day_id: dayId,
+            section: selectedSection,
+            program: selectedProgram,
+          },
+        }
+      );
+      setAvailableTimeSlots(response.data);
+    } catch (err) {
+      console.error("Error fetching available time slots:", err);
+      setError("Error fetching available time slots");
+    }
   };
 
   const resetForm = () => {
@@ -253,11 +298,14 @@ const AllocationForm = ({ onAllocationCreated }) => {
     console.log("Selected section value:", selectedValue);
     setSection(selectedValue);
 
-    // Reset day selection when section changes
+    // Reset day, time slot, and room selections when section changes
     setFormData((prev) => ({
       ...prev,
       day_id: "",
+      slot_id: "",
+      room_id: "",
     }));
+    setAvailableTimeSlots([]);
 
     // Fetch available days if course is selected
     if (formData.course_id && selectedValue) {
@@ -298,6 +346,18 @@ const AllocationForm = ({ onAllocationCreated }) => {
         err.response?.data?.error || "Error creating allocation";
       if (errorMessage.includes("workload would exceed")) {
         setWorkloadWarning(formatWorkloadError(errorMessage));
+      } else if (
+        errorMessage.includes("already allocated for the selected teacher")
+      ) {
+        setError(errorMessage);
+        // Reset time slot, day, and room values
+        setFormData((prev) => ({
+          ...prev,
+          day_id: "",
+          slot_id: "",
+          room_id: "",
+        }));
+        setAvailableTimeSlots([]); // Reset available time slots
       } else {
         setError(errorMessage);
       }
@@ -326,15 +386,39 @@ const AllocationForm = ({ onAllocationCreated }) => {
     <div className="mt-4 smaller-text">
       <h3>Create Allocation</h3>
       {loadingData && (
-        <Spinner animation="border" role="status">
-          <span className="visually-hidden">Loading...</span>
-        </Spinner>
+        <div className="loading-overlay">
+          <Spinner animation="border" role="status">
+            <span className="visually-hidden">Loading...</span>
+          </Spinner>
+          <p>Loading form data...</p>
+        </div>
       )}
       {error && <Alert variant="danger">{error}</Alert>}
       {workloadWarning && <Alert variant="warning">{workloadWarning}</Alert>}
       {success && <Alert variant="success">{success}</Alert>}
 
       <Form onSubmit={handleSubmit}>
+        <div className="allocation-progress mb-4">
+          <div
+            className={`progress-step ${formData.course_id ? "completed" : ""}`}
+          />
+          <div
+            className={`progress-step ${
+              formData.teacher_id ? "completed" : ""
+            }`}
+          />
+          <div className={`progress-step ${section ? "completed" : ""}`} />
+          <div
+            className={`progress-step ${formData.day_id ? "completed" : ""}`}
+          />
+          <div
+            className={`progress-step ${formData.slot_id ? "completed" : ""}`}
+          />
+          <div
+            className={`progress-step ${formData.room_id ? "completed" : ""}`}
+          />
+        </div>
+
         <Row>
           <Col md={7}>
             <Form.Group className="mb-3">
@@ -427,6 +511,25 @@ const AllocationForm = ({ onAllocationCreated }) => {
         <Row>
           <Col md={6}>
             <Form.Group className="mb-3">
+              <Form.Label>Section</Form.Label>
+              <Form.Select
+                value={section}
+                onChange={handleSectionChange}
+                disabled={!program || !availableSections.length}
+                required
+              >
+                <option value="">Select Section</option>
+                {getSectionOptions().map((section) => (
+                  <option key={section.number} value={section.number}>
+                    Section {section.number} ({section.remaining} slots
+                    remaining)
+                  </option>
+                ))}
+              </Form.Select>
+            </Form.Group>
+          </Col>
+          <Col md={6}>
+            <Form.Group className="mb-3">
               <Form.Label>Day</Form.Label>
               <Form.Select
                 name="day_id"
@@ -446,25 +549,6 @@ const AllocationForm = ({ onAllocationCreated }) => {
               </Form.Select>
             </Form.Group>
           </Col>
-          <Col md={6}>
-            <Form.Group className="mb-3">
-              <Form.Label>Section</Form.Label>
-              <Form.Select
-                value={section}
-                onChange={handleSectionChange}
-                disabled={!program || !availableSections.length}
-                required
-              >
-                <option value="">Select Section</option>
-                {getSectionOptions().map((section) => (
-                  <option key={section.number} value={section.number}>
-                    Section {section.number} ({section.remaining} slots
-                    remaining)
-                  </option>
-                ))}
-              </Form.Select>
-            </Form.Group>
-          </Col>
         </Row>
 
         <Row>
@@ -476,9 +560,10 @@ const AllocationForm = ({ onAllocationCreated }) => {
                 value={formData.slot_id}
                 onChange={handleInputChange}
                 required
+                disabled={!formData.day_id} // Disable if no day is selected
               >
                 <option value="">Select Time Slot</option>
-                {timeSlots.map((slot) => (
+                {availableTimeSlots.map((slot) => (
                   <option key={slot.slot_id} value={slot.slot_id}>
                     {slot.start_time.slice(0, -3)} -{" "}
                     {slot.end_time.slice(0, -3)}
@@ -528,6 +613,83 @@ const AllocationForm = ({ onAllocationCreated }) => {
           </Button>
         </div>
       </Form>
+
+      <style jsx>{`
+        .loading-overlay {
+          text-align: center;
+          padding: 20px;
+          background: rgba(255, 255, 255, 0.9);
+          border-radius: 8px;
+          margin-bottom: 20px;
+        }
+
+        .allocation-progress {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 20px;
+          padding: 10px;
+          background: #f8f9fa;
+          border-radius: 20px;
+          position: relative;
+        }
+
+        .allocation-progress::before {
+          content: "";
+          position: absolute;
+          top: 50%;
+          left: 5%;
+          right: 5%;
+          height: 2px;
+          background-color: #e9ecef;
+          transform: translateY(-50%);
+          z-index: 1;
+        }
+
+        .progress-step {
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          background: #e9ecef;
+          position: relative;
+          z-index: 2;
+          transition: all 0.3s ease;
+        }
+
+        .progress-step.completed {
+          background: #198754;
+          box-shadow: 0 0 5px rgba(25, 135, 84, 0.5);
+        }
+
+        .progress-step.completed::after {
+          content: "";
+          position: absolute;
+          left: 50%;
+          width: 100%;
+          height: 2px;
+          background: #198754;
+          transform: translateX(100%);
+          z-index: 1;
+        }
+
+        .progress-step:last-child.completed::after {
+          display: none;
+        }
+
+        .form-group {
+          margin-bottom: 1.5rem;
+        }
+
+        .form-label {
+          font-weight: 500;
+          margin-bottom: 0.5rem;
+        }
+
+        .form-select:disabled {
+          background-color: #e9ecef;
+          cursor: not-allowed;
+        }
+      `}</style>
     </div>
   );
 };
