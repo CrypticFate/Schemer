@@ -724,6 +724,51 @@ app.get("/api/available-time-slots", async (req, res) => {
   }
 });
 
+// Add this new endpoint before the last app.listen line
+app.get("/api/teachers-with-allocations", async (req, res) => {
+  try {
+    const teachersWithAllocations = await pool.query(`
+      SELECT DISTINCT t.teacher_id, t.name, t.email
+      FROM teachers t
+      INNER JOIN allocations a ON t.teacher_id = a.teacher_id
+      ORDER BY t.name
+    `);
+    res.json(teachersWithAllocations.rows);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Modify the existing teacher routine endpoint to include course names
+app.get("/api/teachers/:teacherId/routine", async (req, res) => {
+  try {
+    const { teacherId } = req.params;
+    const routine = await pool.query(
+      `
+      SELECT 
+        d.day_name,
+        ts.start_time,
+        ts.end_time,
+        r.room_number,
+        c.course_name
+      FROM allocations a
+      JOIN days d ON a.day_id = d.day_id
+      JOIN time_slots ts ON a.slot_id = ts.slot_id
+      JOIN rooms r ON a.room_id = r.room_id
+      JOIN courses c ON a.course_id = c.course_id
+      WHERE a.teacher_id = $1
+      ORDER BY d.day_order, ts.slot_order
+    `,
+      [teacherId]
+    );
+    res.json(routine.rows);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 const port = process.env.PORT || 5000;
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
