@@ -36,7 +36,7 @@ export function AuthProvider({ children }) {
       setCurrentUser(user);
       if (user) {
         // Check if the user's email is in the admin list
-        setUserRole(adminEmails.includes(user.email) ? "admin" : "student");
+        setUserRole(adminEmails.includes(user.email) ? "student" : "admin");
       } else {
         setUserRole(null);
       }
