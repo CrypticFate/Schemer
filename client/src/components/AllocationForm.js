@@ -2,6 +2,13 @@ import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import { Form, Button, Alert, Row, Col, Spinner, Badge } from "react-bootstrap";
 
+// Logging helper for frontend (optional, but useful for debugging)
+const log = (level, message, data = null) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [${level}] [AllocationForm] ${message}`, data !== null ? data : '');
+}
+
+// Keep onAllocationCreated prop even if reloading, for flexibility
 const AllocationForm = ({ onAllocationCreated }) => {
     // --- State Variables ---
     const [teachers, setTeachers] = useState([]);
@@ -30,7 +37,7 @@ const AllocationForm = ({ onAllocationCreated }) => {
 
     // Loading states
     const [loadingSections, setLoadingSections] = useState(false);
-    const [loadingDays, setLoadingDays] = useState(false); // Focus on this state
+    const [loadingDays, setLoadingDays] = useState(false);
     const [loadingTimeSlots, setLoadingTimeSlots] = useState(false);
     const [loadingRooms, setLoadingRooms] = useState(false);
 
@@ -49,7 +56,7 @@ const AllocationForm = ({ onAllocationCreated }) => {
             setError("");
         } catch (err) {
             setError("Error loading initial data. Please try refreshing.");
-            console.error("Initial data load error:", err);
+            log("ERROR","Initial data load error:", err);
             setTeachers([]); setCourses([]); setDays([]);
         } finally {
             setLoadingData(false);
@@ -59,7 +66,6 @@ const AllocationForm = ({ onAllocationCreated }) => {
     // --- Fetch Course Data ---
      const fetchCourseData = useCallback(async (courseId) => {
         if (!courseId) return;
-        // Reset dependent fields
         setProgram(""); setCourseType(""); setAvailableSections([]); setSection("");
         setFormData(prev => ({ ...prev, teacher_id: '', day_id: '', slot_id: '', room_id: '' }));
         setAvailableDays([]); setAvailableTimeSlots([]); setAvailableRooms([]); setIsAllocated(false);
@@ -84,180 +90,151 @@ const AllocationForm = ({ onAllocationCreated }) => {
                 if (Array.isArray(sectionsResponse.data)) {
                     setAvailableSections(sectionsResponse.data);
                 } else {
-                    console.error("API did not return an array for available sections:", sectionsResponse.data);
-                    setAvailableSections([]);
-                    setError("Failed to load valid section data.");
+                    log("ERROR", "API did not return an array for available sections:", sectionsResponse.data);
+                    setAvailableSections([]); setError("Failed to load valid section data.");
                 }
             } else { throw new Error("Course details not found"); }
         } catch (err) {
-            setError("Error loading course data."); console.error("Error fetching course data:", err);
+            setError("Error loading course data."); log("ERROR","Error fetching course data:", err);
              setProgram(""); setCourseType(""); setAvailableSections([]);
         } finally { setLoadingSections(false); }
     }, [teachers]);
 
-    // --- Fetch Available Days --- REFINED FOCUS ON LOADING STATE
+    // --- Fetch Available Days ---
     const fetchAvailableDays = useCallback(async (courseId, selectedSection) => {
         if (!courseId || !selectedSection) return;
-
-        console.log(`FETCH_DAYS_START: course ${courseId}, section ${selectedSection}`);
-        // Set loading true *immediately* before the async call
-        setLoadingDays(true);
-        // Reset the target state and related errors *before* the call
-        setAvailableDays([]);
-        setError(''); // Clear previous errors specifically related to days
-
+        log("DEBUG",`FETCH_DAYS_START: course ${courseId}, section ${selectedSection}`);
+        setLoadingDays(true); setAvailableDays([]); setError('');
         try {
-            const response = await axios.get(`http://localhost:5000/api/available-days`, {
-                params: { course_id: courseId, section: selectedSection },
-            });
-            console.log("FETCH_DAYS_SUCCESS:", response.data);
-            if (Array.isArray(response.data)) {
-                 setAvailableDays(response.data);
-            } else {
-                 console.error("FETCH_DAYS_INVALID_DATA:", response.data);
-                 setAvailableDays([]); // Ensure it's an array
-                 setError("Failed to load valid day data.");
-            }
+            const response = await axios.get(`http://localhost:5000/api/available-days`, { params: { course_id: courseId, section: selectedSection } });
+            log("DEBUG","FETCH_DAYS_SUCCESS:", response.data);
+            if (Array.isArray(response.data)) { setAvailableDays(response.data); }
+            else { log("ERROR","FETCH_DAYS_INVALID_DATA:", response.data); setAvailableDays([]); setError("Failed to load valid day data."); }
         } catch (err) {
-            console.error("FETCH_DAYS_ERROR:", err.response?.data || err.message);
-            setError("Error loading available days.");
-            setAvailableDays([]); // Reset on error
-        } finally {
-             // This *must* always run to turn off the spinner
-             console.log("FETCH_DAYS_FINALLY: Setting loadingDays to false");
-            setLoadingDays(false);
-        }
-    }, []); // Empty dependency array is correct here
+            log("ERROR","FETCH_DAYS_ERROR:", err.response?.data || err.message); setError("Error loading available days."); setAvailableDays([]);
+        } finally { log("DEBUG","FETCH_DAYS_FINALLY: Setting loadingDays to false"); setLoadingDays(false); }
+    }, []);
 
-    // --- Fetch Available Time Slots --- (Keep previous safety checks)
+    // --- Fetch Available Time Slots ---
     const fetchAvailableTimeSlots = useCallback(async (dayId, selectedSection, selectedProgram, courseId) => {
         if (!dayId || !selectedSection || !selectedProgram || !courseId ) return;
         setLoadingTimeSlots(true); setAvailableTimeSlots([]);
         setFormData(prev => ({ ...prev, slot_id: '', room_id: '' })); setAvailableRooms([]);
         try {
-            const response = await axios.get("http://localhost:5000/api/available-time-slots", {
-                params: { day_id: dayId, section: selectedSection, program: selectedProgram, course_id: courseId },
-            });
-             if (Array.isArray(response.data)) {
-                setAvailableTimeSlots(response.data);
-             } else {
-                 console.error("API did not return an array for available time slots:", response.data);
-                 setAvailableTimeSlots([]); setError("Failed to load valid time slot data.");
-             }
+            const response = await axios.get("http://localhost:5000/api/available-time-slots", { params: { day_id: dayId, section: selectedSection, program: selectedProgram, course_id: courseId } });
+             if (Array.isArray(response.data)) { setAvailableTimeSlots(response.data); }
+             else { log("ERROR","API did not return an array for available time slots:", response.data); setAvailableTimeSlots([]); setError("Failed to load valid time slot data."); }
         } catch (err) {
-            setError("Error loading available time slots."); console.error("Error fetching time slots:", err);
-            setAvailableTimeSlots([]);
+            setError("Error loading available time slots."); log("ERROR","Error fetching time slots:", err); setAvailableTimeSlots([]);
         } finally { setLoadingTimeSlots(false); }
     }, []);
 
-    // --- Fetch Available Rooms --- (Keep previous safety checks)
+    // --- Fetch Available Rooms ---
      const loadAvailableRooms = useCallback(async (dayId, slotId, type) => {
         if (!dayId || !slotId || !type) return;
         setLoadingRooms(true); setAvailableRooms([]);
         setFormData(prev => ({ ...prev, room_id: '' }));
         try {
-            const response = await axios.get(`http://localhost:5000/api/room-availability`, {
-                params: { day_id: dayId, slot_id: slotId, course_type: type }
-            });
-             if (Array.isArray(response.data)) {
-                 setAvailableRooms(response.data);
-             } else {
-                 console.error("API did not return an array for available rooms:", response.data);
-                 setAvailableRooms([]); setError("Failed to load valid room data.");
-             }
+            const response = await axios.get(`http://localhost:5000/api/room-availability`, { params: { day_id: dayId, slot_id: slotId, course_type: type } });
+             if (Array.isArray(response.data)) { setAvailableRooms(response.data); }
+             else { log("ERROR", "API did not return an array for available rooms:", response.data); setAvailableRooms([]); setError("Failed to load valid room data."); }
         } catch (err) {
-            setError("Error loading available rooms"); console.error(err);
-             setAvailableRooms([]);
+            setError("Error loading available rooms"); log("ERROR", "Error loading rooms:", err); setAvailableRooms([]);
         } finally { setLoadingRooms(false); }
     }, []);
 
     // --- Effects ---
     useEffect(() => { loadInitialData(); }, []);
     useEffect(() => { fetchCourseData(formData.course_id); }, [formData.course_id, fetchCourseData]);
-
-    // Effect to fetch available days when section or course_id changes
     useEffect(() => {
-        console.log(`EFFECT_SECTION_CHANGE: course_id=${formData.course_id}, section=${section}`);
-        // Only fetch if we have both course and section selected
-        if (formData.course_id && section) {
-            fetchAvailableDays(formData.course_id, section);
-        } else {
-            // If section or course is deselected, ensure days are cleared and not loading
-            setAvailableDays([]);
-            if (loadingDays) { // Only reset loading if it was stuck true
-               console.log("EFFECT_SECTION_CHANGE: Clearing stuck loadingDays state.");
-               setLoadingDays(false);
-            }
-        }
-     }, [section, formData.course_id, fetchAvailableDays]); // Dependencies are correct
-
-    // Effect to fetch time slots when day changes
+        log("DEBUG",`EFFECT_SECTION_CHANGE: course_id=${formData.course_id}, section=${section}`);
+        if (formData.course_id && section) { fetchAvailableDays(formData.course_id, section); }
+        else { setAvailableDays([]); if (loadingDays) { log("DEBUG","EFFECT_SECTION_CHANGE: Clearing stuck loadingDays state."); setLoadingDays(false); } }
+     }, [section, formData.course_id, fetchAvailableDays]);
     useEffect(() => {
-        if (formData.day_id && section && program && formData.course_id) {
-             fetchAvailableTimeSlots(formData.day_id, section, program, formData.course_id);
-        } else {
-            setAvailableTimeSlots([]); // Clear if prerequisites change
-        }
+        if (formData.day_id && section && program && formData.course_id) { fetchAvailableTimeSlots(formData.day_id, section, program, formData.course_id); }
+        else { setAvailableTimeSlots([]); }
     }, [formData.day_id, section, program, formData.course_id, fetchAvailableTimeSlots]);
-
-    // Effect to fetch rooms when slot changes
     useEffect(() => {
-        if (formData.day_id && formData.slot_id && courseType) {
-            loadAvailableRooms(formData.day_id, formData.slot_id, courseType);
-        } else {
-            setAvailableRooms([]); // Clear if prerequisites change
-        }
+        if (formData.day_id && formData.slot_id && courseType) { loadAvailableRooms(formData.day_id, formData.slot_id, courseType); }
+        else { setAvailableRooms([]); }
     }, [formData.day_id, formData.slot_id, courseType, loadAvailableRooms]);
 
     // --- Handlers ---
     const handleInputChange = (e) => {
         const { name, value } = e.target;
         let resetFields = {};
-        // Reset logic when changing COURSE, DAY, or SLOT
         if (name === 'course_id') {
             resetFields = { teacher_id: '', day_id: '', slot_id: '', room_id: '' };
             setSection(''); setProgram(''); setCourseType(''); setAvailableSections([]); setAvailableDays([]); setAvailableTimeSlots([]); setAvailableRooms([]); setIsAllocated(false);
-        } else if (name === 'section') {
-             // Let handleSectionChange handle the logic for section selection
-             return;
-        } else if (name === 'day_id') {
-            // When DAY changes, reset SLOT and ROOM
-            resetFields = { slot_id: '', room_id: '' };
-            setAvailableTimeSlots([]); setAvailableRooms([]);
-        } else if (name === 'slot_id') {
-             // When SLOT changes, reset ROOM
-            resetFields = { room_id: '' };
-            setAvailableRooms([]);
-        }
-        // Update the specific field and any dependent resets
+        } else if (name === 'section') { return; }
+        else if (name === 'day_id') { resetFields = { slot_id: '', room_id: '' }; setAvailableTimeSlots([]); setAvailableRooms([]); }
+        else if (name === 'slot_id') { resetFields = { room_id: '' }; setAvailableRooms([]); }
         setFormData((prev) => ({ ...prev, [name]: value, ...resetFields }));
-        // Clear messages on any change
         setError(""); setWorkloadWarning(""); setSuccess("");
     };
-
-    // Handler specifically for SECTION dropdown change
     const handleSectionChange = (e) => {
         const selectedValue = e.target.value;
-        console.log("HANDLE_SECTION_CHANGE: New section selected:", selectedValue);
-        setSection(selectedValue); // Update section state
-
-        // Reset fields that depend on section *before* the effect runs
+        log("DEBUG","HANDLE_SECTION_CHANGE: New section selected:", selectedValue);
+        setSection(selectedValue);
         setFormData((prev) => ({ ...prev, day_id: "", slot_id: "", room_id: "" }));
-        setAvailableDays([]); // Clear days immediately
-        setAvailableTimeSlots([]);
-        setAvailableRooms([]);
+        setAvailableDays([]); setAvailableTimeSlots([]); setAvailableRooms([]);
         setError(""); setWorkloadWarning(""); setSuccess("");
-        // The useEffect hook watching 'section' will now trigger 'fetchAvailableDays'
     };
-
     const resetForm = () => {
         setFormData({ teacher_id: "", course_id: "", room_id: "", day_id: "", slot_id: "" });
         setProgram(""); setSection(""); setCourseType(""); setSuccess(""); setError(""); setWorkloadWarning(""); setIsAllocated(false); setAvailableSections([]); setAvailableDays([]); setAvailableTimeSlots([]); setAvailableRooms([]);
     };
+    const formatWorkloadError = (errorMessage) => { return errorMessage; };
 
-    const formatWorkloadError = (errorMessage) => { /* Basic formatting */ return errorMessage; };
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setIsSubmitting(true); setError(""); setWorkloadWarning(""); setSuccess("");
+        const submissionData = { ...formData, program, section: parseInt(section, 10) };
 
-    const handleSubmit = async (e) => { /* ... No change needed here ... */ };
+        if (!submissionData.teacher_id || !submissionData.course_id || !submissionData.room_id || !submissionData.day_id || !submissionData.slot_id || !submissionData.program || isNaN(submissionData.section)) {
+             setError("Please fill in all fields before submitting."); setIsSubmitting(false); return;
+        }
+
+        try {
+            log("DEBUG", "Form Submit: Sending data", submissionData);
+            const response = await axios.post("http://localhost:5000/api/allocations", submissionData);
+            log("DEBUG", "Form Submit: Success Response", response.data);
+
+            setSuccess("Allocation created successfully! Reloading..."); // Updated message
+            resetForm();
+
+            // Call parent callback if provided
+            if (onAllocationCreated) {
+                log("DEBUG", "Form Submit: Calling onAllocationCreated");
+                onAllocationCreated();
+            }
+
+            // *** ADDED: Reload the page after a short delay ***
+            setTimeout(() => {
+                window.location.reload();
+            }, 1500); // Delay in milliseconds (e.g., 1.5 seconds)
+
+
+        } catch (err) {
+            console.error("Allocation Submission Error:", err.response || err);
+            const serverErrorMessage = err.response?.data?.error || "An unexpected error occurred. Please check console or try again.";
+            log("ERROR", "Form Submit: Error received", { status: err.response?.status, message: serverErrorMessage });
+
+             if (err.response?.status === 409 || serverErrorMessage.includes("workload")) {
+                 setWorkloadWarning(serverErrorMessage);
+             } else {
+                setError(serverErrorMessage);
+             }
+             if (serverErrorMessage.includes("Teacher already booked")) {
+                 setFormData((prev) => ({ ...prev, day_id: '', slot_id: '', room_id: '' }));
+                 setAvailableTimeSlots([]); setAvailableRooms([]);
+             }
+        } finally {
+             // Set submitting false just before potential reload starts
+             setIsSubmitting(false);
+        }
+     };
 
     const getSectionOptions = () => {
          if (!program || !Array.isArray(availableSections) || availableSections.length === 0) { return []; }
@@ -303,30 +280,25 @@ const AllocationForm = ({ onAllocationCreated }) => {
                             <Form.Label>Program</Form.Label>
                             <Form.Control type="text" value={program} readOnly placeholder="Select a course" className="bg-light" />
                         </Form.Group>
-                       
                     </Col>
                 </Row>
-                {/* --- Display Auto-Determined Course Type --- */}
-                            <Row className="mb-3">
-                              <Col md={6}>
-                                 <Form.Group>
-                                     <Form.Label className="fw-bold">Course Type </Form.Label>
-                                     <Form.Control
-                                         type="text"
-                                         value={courseType || 'Theory or Lab'} // Show determined type or placeholder
-                                         readOnly
-                                         disabled // Visually disable it
-                                         className="bg-light" // Style as read-only
-                                     />
-                                      {/* Optional: Badge for visual confirmation */}
-                                     
-                                 </Form.Group>
-                              </Col>
-                              <Col md={6}>
-                                 {/* Empty column */}
-                              </Col>
-                            </Row>
-                            {/* --- End Course Type Display --- */}
+                 {/* Course Type Display */}
+                 <Row className="mb-3">
+                    <Col md={6}>
+                        <Form.Group>
+                            <Form.Label className="fw-bold">Course Type </Form.Label>
+                            <Form.Control
+                                type="text"
+                                value={courseType || 'Select Course first'}
+                                readOnly
+                                disabled
+                                className="bg-light"
+                            />
+                        </Form.Group>
+                    </Col>
+                    <Col md={6}></Col>
+                 </Row>
+
                 <Row> {/* Teacher Row */}
                      <Col md={7}>
                         <Form.Group className="mb-3">
@@ -347,7 +319,6 @@ const AllocationForm = ({ onAllocationCreated }) => {
                     <Col md={6}>
                          <Form.Group className="mb-3">
                             <Form.Label>Section {loadingSections && formData.course_id && <Spinner animation="border" size="sm" />}</Form.Label>
-                            {/* Use handleSectionChange for onChange */}
                             <Form.Select value={section} onChange={handleSectionChange} disabled={!program || getSectionOptions().length === 0 || loadingSections || isSubmitting} required >
                                 <option value="">{!program ? "Select course" : (getSectionOptions().length === 0 && !loadingSections ? "No sections available" : "Select Section")}</option>
                                 {getSectionOptions().map((sec) => ( <option key={sec.number} value={sec.number}> Section {sec.number} ({sec.remaining} slot{sec.remaining !== 1 ? 's' : ''} needed) </option> ))}
@@ -356,16 +327,14 @@ const AllocationForm = ({ onAllocationCreated }) => {
                     </Col>
                     <Col md={6}>
                         <Form.Group className="mb-3">
-                             <Form.Label>Day {loadingDays && <Spinner animation="border" size="sm" />}</Form.Label> {/* Spinner depends only on loadingDays */}
+                             <Form.Label>Day {loadingDays && <Spinner animation="border" size="sm" />}</Form.Label>
                              <Form.Select name="day_id" value={formData.day_id} onChange={handleInputChange} required disabled={!section || loadingDays || availableDays.length === 0 || isSubmitting} >
-                                {/* Improved placeholder logic */}
                                 <option value="">
                                     {!section ? "Select section first" :
                                     loadingDays ? "Loading days..." :
                                     availableDays.length === 0 ? "No available days" :
                                     "Select Day"}
                                 </option>
-                                {/* Map available days only if not loading */}
                                 {!loadingDays && Array.isArray(days) && Array.isArray(availableDays) && days.filter(day => availableDays.includes(day.day_id)).map((day) => (
                                     <option key={day.day_id} value={day.day_id}> {day.day_name} </option>
                                 ))}
