@@ -5,12 +5,13 @@ CREATE TABLE IF NOT EXISTS allocation_logs (
     teacher_id INTEGER,
     course_id INTEGER,
     room_id INTEGER,
-    block_id INTEGER,
+    day_id INTEGER,
+    slot_id INTEGER,
     action VARCHAR(20),
     logged_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Calcullating teacher workload 
+-- Calculating teacher workload 
 CREATE OR REPLACE FUNCTION check_teacher_workload() 
 RETURNS TRIGGER AS $$
 DECLARE
@@ -64,7 +65,6 @@ BEGIN
     -- Add the new course's credit hours to weekly total
     total_hours := total_hours + teacher_allocations.credit_hours;
     
-   
     IF total_hours > 13 THEN
         RAISE EXCEPTION 'Teacher weekly workload would exceed 13 hours (Current: % + New: %)', 
             (total_hours - teacher_allocations.credit_hours), 
@@ -78,22 +78,28 @@ $$ LANGUAGE plpgsql;
 --- Triggers to enforce allocation_availability
 CREATE OR REPLACE FUNCTION check_course_allocation_availability()
 RETURNS TRIGGER AS $$
+DECLARE
+    current_allocations INTEGER;
+    max_allocations INTEGER;
 BEGIN
-    -- Check if the course has any available slots
-    IF (SELECT allocation_availability FROM courses WHERE course_id = NEW.course_id) <= 0 THEN
-        RAISE EXCEPTION 'Cannot allocate course: No slots available for this course';
+    -- Get current allocation count and maximum allowed
+    SELECT COUNT(*), c.allocation_availability
+    INTO current_allocations, max_allocations
+    FROM allocations a
+    RIGHT JOIN courses c ON c.course_id = NEW.course_id
+    WHERE a.course_id = NEW.course_id
+    GROUP BY c.allocation_availability;
+
+    IF current_allocations >= max_allocations THEN
+        RAISE EXCEPTION 'Cannot allocate course: Maximum allocation limit reached (% of %)',
+            current_allocations, max_allocations;
     END IF;
+    
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trg_check_course_allocation
-BEFORE INSERT ON allocations
-FOR EACH ROW
-EXECUTE FUNCTION check_course_allocation_availability();
-
-
--- Create a function to check room availability using cursors
+-- Create a function to check room availability
 CREATE OR REPLACE FUNCTION check_room_availability() 
 RETURNS TRIGGER AS $$
 DECLARE
@@ -125,57 +131,50 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION check_cross_day_allocation() 
 RETURNS TRIGGER AS $$
 DECLARE
-    existing_day INTEGER;
-    new_day INTEGER;
-    course_cursor CURSOR(c_id INTEGER) FOR
-        SELECT DISTINCT tb.day_of_week
-        FROM allocations a
-        JOIN time_blocks tb ON a.block_id = tb.block_id
-        WHERE a.course_id = c_id;
+    existing_allocation RECORD;
 BEGIN
-    -- Get the day of the new allocation
-    SELECT day_of_week INTO new_day
-    FROM time_blocks
-    WHERE block_id = NEW.block_id;
+    -- Check if the same course is already allocated on the same day
+    SELECT a.allocation_id, d.day_name, c.course_name
+    INTO existing_allocation
+    FROM allocations a
+    JOIN days d ON a.day_id = d.day_id
+    JOIN courses c ON a.course_id = c.course_id
+    WHERE a.course_id = NEW.course_id
+    AND a.day_id = NEW.day_id
+    LIMIT 1;
     
-    -- Check existing allocations for this course
-    OPEN course_cursor(NEW.course_id);
-    LOOP
-        FETCH course_cursor INTO existing_day;
-        EXIT WHEN NOT FOUND;
-        
-        IF existing_day = new_day THEN
-            CLOSE course_cursor;
-            RAISE EXCEPTION 'Course already has an allocation on this day (Day: %)', new_day;
-        END IF;
-    END LOOP;
-    CLOSE course_cursor;
+    IF FOUND THEN
+        RAISE EXCEPTION 'Course % already has an allocation on % (Allocation ID: %)',
+            existing_allocation.course_name,
+            existing_allocation.day_name,
+            existing_allocation.allocation_id;
+    END IF;
     
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
--- Create a function to log allocation changes with details
+-- Create a function to log allocation changes
 CREATE OR REPLACE FUNCTION log_allocation_changes() 
 RETURNS TRIGGER AS $$
 BEGIN
     IF (TG_OP = 'INSERT') THEN
         INSERT INTO allocation_logs (
-            allocation_id, teacher_id, course_id, room_id, block_id, action
+            allocation_id, teacher_id, course_id, room_id, day_id, slot_id, action
         ) VALUES (
-            NEW.allocation_id, NEW.teacher_id, NEW.course_id, NEW.room_id, NEW.block_id, 'INSERT'
+            NEW.allocation_id, NEW.teacher_id, NEW.course_id, NEW.room_id, NEW.day_id, NEW.slot_id, 'INSERT'
         );
     ELSIF (TG_OP = 'DELETE') THEN
         INSERT INTO allocation_logs (
-            allocation_id, teacher_id, course_id, room_id, block_id, action
+            allocation_id, teacher_id, course_id, room_id, day_id, slot_id, action
         ) VALUES (
-            OLD.allocation_id, OLD.teacher_id, OLD.course_id, OLD.room_id, OLD.block_id, 'DELETE'
+            OLD.allocation_id, OLD.teacher_id, OLD.course_id, OLD.room_id, OLD.day_id, OLD.slot_id, 'DELETE'
         );
     END IF;
     RETURN NULL;
 END;
-
 $$ LANGUAGE plpgsql;
+
 -- Create triggers
 DROP TRIGGER IF EXISTS check_teacher_workload_trigger ON allocations;
 CREATE TRIGGER check_teacher_workload_trigger
@@ -407,68 +406,3 @@ BEGIN
     RETURN v_allocation_id;
 END;
 $$ LANGUAGE plpgsql;
-
------Edit teacher
-CREATE OR REPLACE FUNCTION edit_teacher(
-    p_teacher_id INTEGER,
-    p_name VARCHAR DEFAULT NULL,
-    p_email VARCHAR DEFAULT NULL
-)
-RETURNS VOID AS $$
-BEGIN
-    UPDATE teachers
-    SET 
-        name = COALESCE(p_name, name),
-        email = COALESCE(p_email, email)
-    WHERE teacher_id = p_teacher_id;
-
-    IF NOT FOUND THEN
-        RAISE EXCEPTION 'Teacher with ID % not found', p_teacher_id;
-    END IF;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE OR REPLACE FUNCTION update_allocations_for_teacher()
-RETURNS TRIGGER AS $$
-BEGIN
-    UPDATE allocations
-    SET teacher_id = NEW.teacher_id  
-    WHERE teacher_id = OLD.teacher_id;
-
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trg_update_allocations_after_teacher_update
-AFTER UPDATE ON teachers
-FOR EACH ROW
-EXECUTE FUNCTION update_allocations_for_teacher();
-
-
-
-----delete teacher
-CREATE OR REPLACE FUNCTION delete_teacher(
-    p_teacher_id INTEGER
-)
-RETURNS VOID AS $$
-BEGIN
-    DELETE FROM teachers WHERE teacher_id = p_teacher_id;
-
-    IF NOT FOUND THEN
-        RAISE EXCEPTION 'Teacher with ID % not found', p_teacher_id;
-    END IF;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE OR REPLACE FUNCTION delete_allocations_for_teacher()
-RETURNS TRIGGER AS $$
-BEGIN
-    DELETE FROM allocations WHERE teacher_id = OLD.teacher_id;
-    RETURN OLD;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trg_delete_allocations_before_teacher
-BEFORE DELETE ON teachers
-FOR EACH ROW
-EXECUTE FUNCTION delete_allocations_for_teacher();

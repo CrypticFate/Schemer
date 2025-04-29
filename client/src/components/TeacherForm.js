@@ -1,296 +1,279 @@
 import React, { useState, useEffect } from "react";
+import { Card, Modal, Button, Alert, Table } from "react-bootstrap";
 import axios from "axios";
-import { Card, Modal, Button } from "react-bootstrap";
 
 const TeacherForm = () => {
+  // State for adding new teacher
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+
+  // State for teacher list and operations
   const [teachers, setTeachers] = useState([]);
-  const [selectedEditTeacherId, setSelectedEditTeacherId] = useState("");
-  const [selectedDeleteTeacherId, setSelectedDeleteTeacherId] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  // State for edit operation
+  const [editTeacher, setEditTeacher] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [editName, setEditName] = useState("");
   const [editEmail, setEditEmail] = useState("");
-  const [showEditConfirm, setShowEditConfirm] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [confirmDelName, setConfirmDelName] = useState("");
-  const [deleteName, setDeleteName] = useState("");
-  const [deleteEmail, setDeleteEmail] = useState("");
+  const [editError, setEditError] = useState("");
 
+  // State for delete operation
+  const [deleteTeacher, setDeleteTeacher] = useState(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleteWarning, setDeleteWarning] = useState("");
 
-  const onSubmitForm = async (e) => {
-    e.preventDefault();
-    try {
-      const response = await fetch("http://localhost:5000/api/teachers", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email })
-      });
-      if (response.ok) {
-        setName("");
-        setEmail("");
-        alert("Teacher added successfully!");
-        fetchTeachers();
-      }
-    } catch (err) {
-      console.error(err.message);
-      alert("Error adding teacher");
-    }
-  };
-
-  const fetchTeachers = async () => {
-    try {
-      const res = await axios.get("http://localhost:5000/api/teachers");
-      setTeachers(res.data);
-    } catch (err) {
-      console.error("Error fetching teachers", err);
-    }
-  };
-
+  // Fetch teachers on component mount
   useEffect(() => {
     fetchTeachers();
   }, []);
 
-  useEffect(() => {
-    const teacher = teachers.find(t => t.teacher_id === parseInt(selectedEditTeacherId));
-    if (teacher) {
-      setEditName(teacher.name);
-      setEditEmail(teacher.email);
-    }
-  }, [selectedEditTeacherId, teachers]);
-
-  useEffect(() => {
-    const teacher = teachers.find(t => t.teacher_id === parseInt(selectedDeleteTeacherId));
-    if (teacher) {
-      setDeleteName(teacher.name);
-      setDeleteEmail(teacher.email);
-    } else {
-      setDeleteName("");
-      setDeleteEmail("");
-    }
-  }, [selectedDeleteTeacherId, teachers]);
-  
-
-  const handleEditSubmit = async () => {
+  // Fetch all teachers
+  const fetchTeachers = async () => {
     try {
-      if (!editName.trim() || !editEmail.trim()) {
-        alert("Name and Email are required");
-        return;
-      }
-
-      if (!/\S+@\S+\.\S+/.test(editEmail)) {
-        alert("Please enter a valid email address");
-        return;
-      }
-
-      const updateData = { name: editName, email: editEmail };
-      const response = await axios.put(`http://localhost:5000/api/teachers/${selectedEditTeacherId}`, updateData);
-
-      if (response.status === 200) {
-        alert("Teacher updated successfully!");
-        setShowEditConfirm(false);
-        setSelectedEditTeacherId("");
-        setEditName("");
-        setEditEmail("");
-        fetchTeachers();
-      }
+      setLoading(true);
+      const response = await axios.get("http://localhost:5000/api/teachers");
+      setTeachers(response.data);
+      setError("");
     } catch (err) {
-      console.error("Error updating teacher:", err);
-      alert("Failed to update teacher");
+      setError("Failed to fetch teachers");
+      console.error("Error fetching teachers:", err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleDeleteSubmit = async () => {
+  // Handle adding new teacher
+  const onSubmitForm = async (e) => {
+    e.preventDefault();
     try {
-      const response = await axios.delete(`http://localhost:5000/api/teachers/${selectedDeleteTeacherId}/delete`);
-      if (response.status === 200) {
-        alert("Teacher deleted successfully, along with all allocations.");
-        setSelectedDeleteTeacherId("");
-        setConfirmDelName("");
-        setShowDeleteConfirm(false);
-        fetchTeachers();
+      await axios.post("http://localhost:5000/api/teachers", { name, email });
+      setSuccess("Teacher added successfully!");
+      setName("");
+      setEmail("");
+      fetchTeachers();
+    } catch (err) {
+      setError(err.response?.data?.error || "Error adding teacher");
+    }
+  };
+
+  // Handle initiating edit
+  const handleEditClick = (teacher) => {
+    setEditTeacher(teacher);
+    setEditName(teacher.name);
+    setEditEmail(teacher.email);
+    setEditError("");
+    setShowEditModal(true);
+  };
+
+  // Handle edit submission
+  const handleEditSubmit = async () => {
+    try {
+      await axios.put(
+        `http://localhost:5000/api/teachers/${editTeacher.teacher_id}`,
+        {
+          name: editName,
+          email: editEmail,
+        }
+      );
+      setShowEditModal(false);
+      setSuccess("Teacher updated successfully!");
+      fetchTeachers();
+    } catch (err) {
+      setEditError(err.response?.data?.error || "Error updating teacher");
+    }
+  };
+
+  // Handle initiating delete
+  const handleDeleteClick = async (teacher) => {
+    try {
+      const response = await axios.get(
+        `http://localhost:5000/api/teachers/${teacher.teacher_id}/check-delete`
+      );
+      if (response.data) {
+        setDeleteTeacher(teacher);
+        setDeleteWarning(response.data.message);
+        setShowDeleteModal(true);
+        setDeleteConfirm("");
+        setError(""); // Clear any existing errors
       }
     } catch (err) {
-      console.error("Error deleting teacher:", err);
-      alert("Failed to delete teacher");
+      console.error("Delete check error:", err.response?.data || err.message);
+      setError(
+        err.response?.data?.error || "Error checking teacher delete status"
+      );
+      setShowDeleteModal(false);
+    }
+  };
+
+  // Handle delete submission
+  const handleDeleteSubmit = async () => {
+    try {
+      await axios.delete(
+        `http://localhost:5000/api/teachers/${deleteTeacher.teacher_id}/delete`
+      );
+      setShowDeleteModal(false);
+      setSuccess("Teacher deleted successfully!");
+      fetchTeachers();
+    } catch (err) {
+      setError(err.response?.data?.error || "Error deleting teacher");
     }
   };
 
   return (
-    <div className="d-flex flex-column align-items-center">
-      {/* Add New Teacher */}
-      <div className="mb-5 w-100" style={{ maxWidth: "600px" }}>
-        <Card>
-          <Card.Header as="h4" className="text-center bg-primary text-white">
-            Add New Teacher
-          </Card.Header>
-          <Card.Body>
-            <form onSubmit={onSubmitForm}>
-              <div className="form-group mb-4">
-                <label className="form-label">Teacher Name</label>
-                <input
-                  type="text"
-                  className="form-control form-control-lg"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Enter teacher's full name"
-                  required
-                />
-              </div>
-              <div className="form-group mb-4">
-                <label className="form-label">Email Address</label>
-                <input
-                  type="email"
-                  className="form-control form-control-lg"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter teacher's email"
-                  required
-                />
-              </div>
-              <div className="text-center">
-                <button className="btn btn-primary btn-lg">Add Teacher</button>
-              </div>
-            </form>
-          </Card.Body>
-        </Card>
-      </div>
+    <div className="container mt-4">
+      {/* Add New Teacher Form */}
+      <Card className="mb-4">
+        <Card.Header as="h4" className="text-center bg-primary text-white">
+          Add New Teacher
+        </Card.Header>
+        <Card.Body>
+          {error && <Alert variant="danger">{error}</Alert>}
+          {success && <Alert variant="success">{success}</Alert>}
 
-      {/* Edit Teacher */}
-      <div className="mb-5 w-100" style={{ maxWidth: "600px" }}>
-        <Card>
-          <Card.Header as="h4" className="text-center bg-warning text-dark">
-            Edit Teacher
-          </Card.Header>
-          <Card.Body>
+          <form onSubmit={onSubmitForm}>
             <div className="form-group mb-3">
-              <label>Select Teacher</label>
-              <select
-                className="form-control"
-                value={selectedEditTeacherId}
-                onChange={(e) => setSelectedEditTeacherId(e.target.value)}
-              >
-                <option value="">Select a teacher</option>
-                {teachers.map((t) => (
-                  <option key={t.teacher_id} value={t.teacher_id}>
-                    {t.name} (ID: {t.teacher_id})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="form-group mb-4">
-              <label className="form-label">Teacher Name</label>
+              <label>Teacher Name</label>
               <input
                 type="text"
-                className="form-control form-control-lg"
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                placeholder="Teacher Name"
+                className="form-control"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
               />
             </div>
-            <div className="form-group mb-4">
-              <label className="form-label">Teacher Email</label>
+            <div className="form-group mb-3">
+              <label>Email Address</label>
               <input
                 type="email"
-                className="form-control form-control-lg"
-                value={editEmail}
-                onChange={(e) => setEditEmail(e.target.value)}
-                placeholder="Teacher Email"
+                className="form-control"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
               />
             </div>
+            <button type="submit" className="btn btn-primary">
+              Add Teacher
+            </button>
+          </form>
+        </Card.Body>
+      </Card>
 
-            <div className="text-center">
-              <button
-                className="btn btn-warning btn-lg"
-                onClick={() => setShowEditConfirm(true)}
-                disabled={!selectedEditTeacherId || !editName.trim() || !editEmail.trim()}
-              >
-                Confirm Edit
-              </button>
-            </div>
-          </Card.Body>
-        </Card>
-      </div>
-
-      {/* Delete Teacher */}
-      <div className="mb-5 w-100" style={{ maxWidth: "600px" }}>
-        <Card>
-          <Card.Header as="h4" className="text-center bg-danger text-white">
-            Delete Teacher
-          </Card.Header>
-          <Card.Body>
-            <div className="form-group mb-3">
-              <label>Select Teacher</label>
-              <select
-                className="form-control"
-                value={selectedDeleteTeacherId}
-                onChange={(e) => setSelectedDeleteTeacherId(e.target.value)}
-              >
-                <option value="">Select a teacher</option>
-                {teachers.map((t) => (
-                  <option key={t.teacher_id} value={t.teacher_id}>
-                    {t.name} (ID: {t.teacher_id})
-                  </option>
+      {/* Teachers List */}
+      <Card>
+        <Card.Header as="h4" className="text-center bg-info text-white">
+          Teachers List
+        </Card.Header>
+        <Card.Body>
+          {loading ? (
+            <div className="text-center">Loading...</div>
+          ) : (
+            <Table striped bordered hover>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {teachers.map((teacher) => (
+                  <tr key={teacher.teacher_id}>
+                    <td>{teacher.name}</td>
+                    <td>{teacher.email}</td>
+                    <td>
+                      <Button
+                        variant="warning"
+                        size="sm"
+                        className="me-2"
+                        onClick={() => handleEditClick(teacher)}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        onClick={() => handleDeleteClick(teacher)}
+                      >
+                        Delete
+                      </Button>
+                    </td>
+                  </tr>
                 ))}
-              </select>
-            </div>
-            {selectedDeleteTeacherId && (
-              <div className="mb-4 p-3 border rounded">
-                <p><strong>Name:</strong> {deleteName}</p>
-                <p><strong>Email:</strong> {deleteEmail}</p>
-                <p className="text-danger">
-                  Warning: Deleting a teacher will also remove all their allocations.
-                </p>
-              </div>
-            )}
-            <div className="text-center">
-              <button
-                className="btn btn-danger btn-lg"
-                onClick={() => setShowDeleteConfirm(true)}
-                disabled={!selectedDeleteTeacherId}
-              >
-                Delete Teacher
-              </button>
-            </div>
-          </Card.Body>
-        </Card>
-      </div>
+              </tbody>
+            </Table>
+          )}
+        </Card.Body>
+      </Card>
 
-      {/* Edit Confirmation Modal */}
-      <Modal show={showEditConfirm} onHide={() => setShowEditConfirm(false)} centered backdrop="static">
+      {/* Edit Modal */}
+      <Modal show={showEditModal} onHide={() => setShowEditModal(false)}>
         <Modal.Header closeButton>
-          <Modal.Title>Confirm Edit</Modal.Title>
+          <Modal.Title>Edit Teacher</Modal.Title>
         </Modal.Header>
-        <Modal.Body>Are you sure you want to save these changes?</Modal.Body>
+        <Modal.Body>
+          {editError && <Alert variant="danger">{editError}</Alert>}
+          <div className="form-group mb-3">
+            <label>Name</label>
+            <input
+              type="text"
+              className="form-control"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+            />
+          </div>
+          <div className="form-group mb-3">
+            <label>Email</label>
+            <input
+              type="email"
+              className="form-control"
+              value={editEmail}
+              onChange={(e) => setEditEmail(e.target.value)}
+            />
+          </div>
+        </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowEditConfirm(false)}>Cancel</Button>
-          <Button variant="warning" onClick={handleEditSubmit}>Yes, Edit</Button>
+          <Button variant="secondary" onClick={() => setShowEditModal(false)}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={handleEditSubmit}>
+            Save Changes
+          </Button>
         </Modal.Footer>
       </Modal>
 
-      {/* Delete Confirmation Modal */}
-      <Modal show={showDeleteConfirm} onHide={() => setShowDeleteConfirm(false)} centered backdrop="static">
+      {/* Delete Modal */}
+      <Modal show={showDeleteModal} onHide={() => setShowDeleteModal(false)}>
         <Modal.Header closeButton>
-          <Modal.Title>Confirm Deletion</Modal.Title>
+          <Modal.Title>Confirm Delete</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          <p>Type the teacher's name to confirm deletion:</p>
+          {deleteWarning && <Alert variant="warning">{deleteWarning}</Alert>}
+          <p>
+            To confirm deletion, type the teacher's name:{" "}
+            <strong>{deleteTeacher?.name}</strong>
+          </p>
           <input
             type="text"
             className="form-control"
-            value={confirmDelName}
-            onChange={(e) => setConfirmDelName(e.target.value)}
-            placeholder="Confirm Teacher Name"
+            value={deleteConfirm}
+            onChange={(e) => setDeleteConfirm(e.target.value)}
+            placeholder="Type teacher's name to confirm"
           />
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowDeleteConfirm(false)}>Cancel</Button>
+          <Button variant="secondary" onClick={() => setShowDeleteModal(false)}>
+            Cancel
+          </Button>
           <Button
             variant="danger"
             onClick={handleDeleteSubmit}
-            disabled={teachers.find(t => t.teacher_id === parseInt(selectedDeleteTeacherId))?.name !== confirmDelName}
+            disabled={deleteConfirm !== deleteTeacher?.name}
           >
-            Confirm Delete
+            Delete Teacher
           </Button>
         </Modal.Footer>
       </Modal>
