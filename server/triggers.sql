@@ -407,3 +407,68 @@ BEGIN
     RETURN v_allocation_id;
 END;
 $$ LANGUAGE plpgsql;
+
+-----Edit teacher
+CREATE OR REPLACE FUNCTION edit_teacher(
+    p_teacher_id INTEGER,
+    p_name VARCHAR DEFAULT NULL,
+    p_email VARCHAR DEFAULT NULL
+)
+RETURNS VOID AS $$
+BEGIN
+    UPDATE teachers
+    SET 
+        name = COALESCE(p_name, name),
+        email = COALESCE(p_email, email)
+    WHERE teacher_id = p_teacher_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Teacher with ID % not found', p_teacher_id;
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION update_allocations_for_teacher()
+RETURNS TRIGGER AS $$
+BEGIN
+    UPDATE allocations
+    SET teacher_id = NEW.teacher_id  
+    WHERE teacher_id = OLD.teacher_id;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_update_allocations_after_teacher_update
+AFTER UPDATE ON teachers
+FOR EACH ROW
+EXECUTE FUNCTION update_allocations_for_teacher();
+
+
+
+----delete teacher
+CREATE OR REPLACE FUNCTION delete_teacher(
+    p_teacher_id INTEGER
+)
+RETURNS VOID AS $$
+BEGIN
+    DELETE FROM teachers WHERE teacher_id = p_teacher_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Teacher with ID % not found', p_teacher_id;
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION delete_allocations_for_teacher()
+RETURNS TRIGGER AS $$
+BEGIN
+    DELETE FROM allocations WHERE teacher_id = OLD.teacher_id;
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_delete_allocations_before_teacher
+BEFORE DELETE ON teachers
+FOR EACH ROW
+EXECUTE FUNCTION delete_allocations_for_teacher();
