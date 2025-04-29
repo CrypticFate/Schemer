@@ -125,6 +125,71 @@ app.post("/api/teachers", async (req, res) => {
     }
 });
 
+//edit teacher
+app.put("/api/teachers/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { name, email } = req.body;
+  
+      // Validate required fields
+      if (!name && !email) {
+        return res.status(400).json({
+          error: "At least one field (name or email) must be provided for update",
+        });
+      }
+  
+      // Call the PostgreSQL edit_teacher function
+      await pool.query(
+        "SELECT edit_teacher($1, $2, $3)",
+        [id, name, email]
+      );
+  
+      // Fetch and return the updated teacher
+      const updatedTeacher = await pool.query(
+        "SELECT * FROM teachers WHERE teacher_id = $1",
+        [id]
+      );
+  
+      if (updatedTeacher.rows.length === 0) {
+        return res.status(404).json({ error: "Teacher not found" });
+      }
+  
+      res.json(updatedTeacher.rows[0]);
+    } catch (err) {
+      console.error(err.message);
+      
+      // Handle specific error cases
+      if (err.message.includes("not found")) {
+        return res.status(404).json({ error: err.message });
+      }
+      if (err.code === "23505") { // Unique violation
+        return res.status(400).json({ error: "Email already exists" });
+      }
+      
+      res.status(500).json({ 
+        error: "Error updating teacher",
+        details: err.message 
+      });
+    }
+  });
+  
+  //delete teacher
+  app.delete('/api/teachers/:id/delete', async (req, res) => {
+    const teacherId = parseInt(req.params.id);
+    try {
+      const client = await pool.connect();
+      await client.query('BEGIN');
+      await client.query('SELECT delete_teacher($1)', [teacherId]);
+      await client.query('COMMIT');
+      client.release();
+      res.status(200).json({ message: 'Teacher deleted successfully' });
+    } catch (err) {
+      console.error('Error deleting teacher:', err);
+      res.status(500).json({ error: err.message || 'Internal server error' });
+    }
+  });
+  
+
 // Get teacher's schedule
 app.get("/api/teachers/:teacherId/schedule", async (req, res) => {
     try {
