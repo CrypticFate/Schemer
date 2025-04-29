@@ -225,7 +225,7 @@ const TeacherRoutine = () => {
                                     <div className={`class-slot ${isLab ? 'lab-slot' : 'theory-slot'}`}>
                                         <div className="course-name">{matchingAllocation.course_name || 'N/A'}</div>
                                         <div className="room-number">Room: {matchingAllocation.room_number || 'N/A'}</div>
-                                         <Badge pill bg={isLab ? 'primary' : 'success'} className="mt-1">
+                                         <Badge pill bg={isLab ? 'primary' : 'success'} className="mt-1 type-badge">
                                              {matchingAllocation.course_type || (isLab ? 'Lab' : 'Theory')}
                                          </Badge>
                                     </div> );

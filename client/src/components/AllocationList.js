@@ -105,7 +105,7 @@ const AllocationList = ({ refresh }) => {
                                             </td>
                                             <td>
                                                 <span className="d-block course-name-display">{alloc.course_name}</span>
-                                                 <Badge pill bg={alloc.course_type === 'Lab' ? 'primary' : 'success'} className="fw-normal type-badge">
+                                                 <Badge pill bg={alloc.course_type === 'Lab' ? 'primary' : 'success'} className="mt-1 type-badge">
                                                      {alloc.course_type || 'N/A'}
                                                  </Badge>
                                             </td>
