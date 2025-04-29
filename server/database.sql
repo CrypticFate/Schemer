@@ -88,6 +88,14 @@ CREATE TABLE routine (
     -- Removed UNIQUE(day_id, slot_id, room_number) as different sections can use same room/slot
 );
 
+-- Create allocation_logs table if not exists
+CREATE TABLE IF NOT EXISTS allocation_logs (
+    log_id SERIAL PRIMARY KEY,
+    action_type VARCHAR(50) NOT NULL,
+    description TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 
 -- Insert initial data
 
@@ -386,3 +394,263 @@ CREATE TRIGGER trg_check_course_allocation
     BEFORE INSERT ON allocations
     FOR EACH ROW
     EXECUTE FUNCTION check_course_allocation_availability(); -- Assume function is defined correctly
+
+-- Function to handle teacher updates
+CREATE OR REPLACE FUNCTION handle_teacher_update()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Update routine table to maintain consistency
+    UPDATE routine
+    SET teacher_name = NEW.name
+    WHERE teacher_name = OLD.name;
+
+    -- Log the change
+    INSERT INTO allocation_logs (action_type, description)
+    VALUES (
+        'UPDATE',
+        format('Teacher updated - ID: %s, Old Name: %s, New Name: %s',
+            OLD.teacher_id, OLD.name, NEW.name)
+    );
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to check if teacher can be deleted
+CREATE OR REPLACE FUNCTION can_delete_teacher(p_teacher_id INTEGER)
+RETURNS TABLE (
+    can_delete BOOLEAN,
+    allocation_count INTEGER,
+    message TEXT
+) AS $$
+DECLARE
+    alloc_count INTEGER;
+BEGIN
+    -- Count allocations for this teacher
+    SELECT COUNT(*)
+    INTO alloc_count
+    FROM allocations
+    WHERE teacher_id = p_teacher_id;
+
+    RETURN QUERY
+    SELECT 
+        TRUE,
+        alloc_count,
+        CASE 
+            WHEN alloc_count > 0 
+            THEN format('Warning: This will delete %s course allocation(s)', alloc_count)
+            ELSE 'No course allocations will be affected'
+        END;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to safely delete a teacher and all related records
+CREATE OR REPLACE FUNCTION safely_delete_teacher(p_teacher_id INTEGER)
+RETURNS BOOLEAN AS $$
+DECLARE
+    teacher_record RECORD;
+    alloc_count INTEGER;
+BEGIN
+    -- Get teacher details for logging
+    SELECT * INTO teacher_record
+    FROM teachers
+    WHERE teacher_id = p_teacher_id;
+
+    IF NOT FOUND THEN
+        RETURN FALSE;
+    END IF;
+
+    -- Count allocations for logging
+    SELECT COUNT(*) INTO alloc_count
+    FROM allocations
+    WHERE teacher_id = p_teacher_id;
+
+    -- Begin transaction
+    BEGIN
+        -- Delete from allocations first (this will trigger routine update via existing trigger)
+        DELETE FROM allocations
+        WHERE teacher_id = p_teacher_id;
+
+        -- Delete the teacher
+        DELETE FROM teachers
+        WHERE teacher_id = p_teacher_id;
+
+        -- Log the deletion
+        INSERT INTO allocation_logs (action_type, description)
+        VALUES (
+            'DELETE',
+            format('Teacher deleted - ID: %s, Name: %s, Email: %s, Allocations removed: %s',
+                teacher_record.teacher_id, teacher_record.name, teacher_record.email, alloc_count)
+        );
+
+        RETURN TRUE;
+    EXCEPTION WHEN OTHERS THEN
+        -- Log error and rollback
+        INSERT INTO allocation_logs (action_type, description)
+        VALUES ('ERROR', format('Failed to delete teacher ID %s: %s', p_teacher_id, SQLERRM));
+        RAISE;
+    END;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Drop existing triggers if they exist
+DROP TRIGGER IF EXISTS teacher_update_trigger ON teachers;
+DROP TRIGGER IF EXISTS teacher_delete_trigger ON teachers;
+
+-- Create trigger for teacher updates
+CREATE TRIGGER teacher_update_trigger
+    AFTER UPDATE ON teachers
+    FOR EACH ROW
+    EXECUTE FUNCTION handle_teacher_update();
+
+-- Create trigger for maintaining referential integrity
+CREATE OR REPLACE FUNCTION check_teacher_references()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Check if teacher has any allocations before allowing delete
+    IF (SELECT COUNT(*) FROM allocations WHERE teacher_id = OLD.teacher_id) > 0 THEN
+        -- Don't prevent deletion, but log it
+        INSERT INTO allocation_logs (action_type, description)
+        VALUES ('DELETE_CHECK', format('Teacher %s has existing allocations that will be removed', OLD.teacher_id));
+    END IF;
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger for delete checks
+CREATE TRIGGER teacher_delete_trigger
+    BEFORE DELETE ON teachers
+    FOR EACH ROW
+    EXECUTE FUNCTION check_teacher_references();
+
+-- Function to check if course can be deleted
+CREATE OR REPLACE FUNCTION can_delete_course(p_course_id INTEGER)
+RETURNS TABLE (
+    can_delete BOOLEAN,
+    allocation_count INTEGER,
+    message TEXT
+) AS $$
+DECLARE
+    alloc_count INTEGER;
+BEGIN
+    -- Count allocations for this course
+    SELECT COUNT(*)
+    INTO alloc_count
+    FROM allocations
+    WHERE course_id = p_course_id;
+
+    RETURN QUERY
+    SELECT 
+        TRUE,
+        alloc_count,
+        CASE 
+            WHEN alloc_count > 0 
+            THEN format('Warning: This will delete %s course allocation(s)', alloc_count)
+            ELSE 'No course allocations will be affected'
+        END;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to safely delete a course and all related records
+CREATE OR REPLACE FUNCTION safely_delete_course(p_course_id INTEGER)
+RETURNS BOOLEAN AS $$
+DECLARE
+    course_record RECORD;
+    alloc_count INTEGER;
+BEGIN
+    -- Get course details for logging
+    SELECT * INTO course_record
+    FROM courses
+    WHERE course_id = p_course_id;
+
+    IF NOT FOUND THEN
+        RETURN FALSE;
+    END IF;
+
+    -- Count allocations for logging
+    SELECT COUNT(*) INTO alloc_count
+    FROM allocations
+    WHERE course_id = p_course_id;
+
+    -- Begin transaction
+    BEGIN
+        -- Delete from allocations first (this will trigger routine update via existing trigger)
+        DELETE FROM allocations
+        WHERE course_id = p_course_id;
+
+        -- Delete the course
+        DELETE FROM courses
+        WHERE course_id = p_course_id;
+
+        -- Log the deletion
+        INSERT INTO allocation_logs (action_type, description)
+        VALUES (
+            'DELETE',
+            format('Course deleted - ID: %s, Code: %s, Name: %s, Type: %s, Allocations removed: %s',
+                course_record.course_id, 
+                course_record.course_code, 
+                course_record.course_name, 
+                course_record.course_type,
+                alloc_count)
+        );
+
+        RETURN TRUE;
+    EXCEPTION WHEN OTHERS THEN
+        -- Log error and rollback
+        INSERT INTO allocation_logs (action_type, description)
+        VALUES ('ERROR', format('Failed to delete course ID %s: %s', p_course_id, SQLERRM));
+        RAISE;
+    END;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to handle course updates
+CREATE OR REPLACE FUNCTION handle_course_update()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Update routine table to maintain consistency
+    UPDATE routine
+    SET course_code = NEW.course_code
+    WHERE course_code = OLD.course_code;
+
+    -- Log the change
+    INSERT INTO allocation_logs (action_type, description)
+    VALUES (
+        'UPDATE',
+        format('Course updated - ID: %s, Old Code: %s, New Code: %s, Old Name: %s, New Name: %s, Old Type: %s, New Type: %s',
+            OLD.course_id, OLD.course_code, NEW.course_code, 
+            OLD.course_name, NEW.course_name,
+            OLD.course_type, NEW.course_type)
+    );
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger for course updates
+DROP TRIGGER IF EXISTS course_update_trigger ON courses;
+CREATE TRIGGER course_update_trigger
+    AFTER UPDATE ON courses
+    FOR EACH ROW
+    EXECUTE FUNCTION handle_course_update();
+
+-- Function to check course references before delete
+CREATE OR REPLACE FUNCTION check_course_references()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Check if course has any allocations before allowing delete
+    IF (SELECT COUNT(*) FROM allocations WHERE course_id = OLD.course_id) > 0 THEN
+        -- Don't prevent deletion, but log it
+        INSERT INTO allocation_logs (action_type, description)
+        VALUES ('DELETE_CHECK', format('Course %s has existing allocations that will be removed', OLD.course_id));
+    END IF;
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger for delete checks
+DROP TRIGGER IF EXISTS course_delete_trigger ON courses;
+CREATE TRIGGER course_delete_trigger
+    BEFORE DELETE ON courses
+    FOR EACH ROW
+    EXECUTE FUNCTION check_course_references();
