@@ -224,7 +224,7 @@ const RoutineView = () => {
                                                     <div className="course-code">{slotData.course_code || 'N/A'}</div>
                                                     <div className="room-number">Room: {slotData.room_number || 'N/A'}</div>
                                                     {slotData.teacher_name && <div className="teacher-name">({slotData.teacher_name})</div>}
-                                                    <Badge pill bg={isLab ? 'info' : 'secondary'} className="mt-1">
+                                                    <Badge pill bg={isLab ? 'primary' : 'success'} className="mt-1">
                                                         {isLab ? 'Lab' : 'Theory'}
                                                     </Badge>
                                                 </div>
