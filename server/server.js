@@ -604,14 +604,16 @@ app.delete("/api/allocations/:id", async (req, res) => {
 // Get routine
 app.get("/api/routine", async (req, res) => {
   try {
-    const { program, section } = req.query;
-    if (!program || !section)
+    const { program, section, semester} = req.query;
+    if (!program || !section || !semester)
       return res
         .status(400)
         .json({ error: "Program and Section are required" });
+    
+    //semester = parseInt(req.query.semester);
     const routine = await pool.query(
-      "SELECT * FROM get_formatted_routine($1, $2)",
-      [program, section]
+      "SELECT * FROM get_formatted_routine($1, $2, $3)",
+      [program, section, semester]
     );
     const formattedRoutine = routine.rows.reduce((acc, row) => {
       const { day_name, time_slot, course_code, room_number, teacher_name } =
