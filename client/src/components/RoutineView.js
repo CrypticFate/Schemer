@@ -26,12 +26,15 @@ const RoutineView = () => {
     const [error, setError] = useState('');
     const [selectedProgram, setSelectedProgram] = useState('');
     const [selectedSection, setSelectedSection] = useState('');
+    const [selectedSemester, setSelectedSemester] = useState('');
+
     // Note: skippedCells state is not strictly needed with the rowspan approach,
     // but can be kept if complex overlapping logic were ever added. Removing for simplicity now.
     // const [skippedCells, setSkippedCells] = useState({});
 
     const programs = { "CSE": 2, "SWE": 1, "EEE": 3, "ME": 2, "IPE": 1, "CEE": 3, "BTM": 1 };
     const sections = selectedProgram ? Array.from({ length: programs[selectedProgram] || 0 }, (_, i) => i + 1) : [];
+    const semesters = Array.from({ length: 8 }, (_, i) => i + 1);
 
     // *** UPDATED displaySlots Array ***
     // Define canonical display slots (rows in the table)
@@ -52,11 +55,11 @@ const RoutineView = () => {
 
     // --- Fetch Routine Data ---
     const fetchRoutine = useCallback(async () => {
-        if (selectedProgram && selectedSection) {
+        if (selectedProgram && selectedSection && selectedSemester) {
             setLoading(true); setError(''); setRoutine(null);
             try {
                 const response = await axios.get(`http://localhost:5000/api/routine/`, {
-                    params: { program: selectedProgram, section: selectedSection }
+                    params: { program: selectedProgram, section: selectedSection, semester: selectedSemester }
                 });
                 console.log("Routine data received:", response.data);
                 setRoutine(response.data);
@@ -66,7 +69,7 @@ const RoutineView = () => {
                 setRoutine({});
             } finally { setLoading(false); }
         } else { setRoutine(null); }
-    }, [selectedProgram, selectedSection]);
+    }, [selectedProgram, selectedSection, selectedSemester]);
 
     useEffect(() => { fetchRoutine(); }, [fetchRoutine]);
 
@@ -78,7 +81,7 @@ const RoutineView = () => {
         .then((canvas) => {
             const link = document.createElement("a");
             link.href = canvas.toDataURL("image/png");
-            link.download = `${selectedProgram}_Sec-${selectedSection}_Routine.png`; // Cleaned filename
+            link.download = `${selectedProgram}_Sec-${selectedSection}_Sem-${selectedSemester}_Routine.png`; // Cleaned filename
             link.click();
         }).catch(err => console.error("Error generating image:", err));
     };
@@ -119,7 +122,7 @@ const RoutineView = () => {
             pdf.text(title, pdfWidth / 2, 10, { align: 'center' }); // Add title to PDF
 
             pdf.addImage(imgData, 'PNG', xPos, yPos, imgWidth, imgHeight);
-            pdf.save(`${selectedProgram}_Sec-${selectedSection}_Routine.pdf`); // Cleaned filename
+            pdf.save(`${selectedProgram}_Sec-${selectedSection}_Sem-${selectedSemester}_Routine.pdf`); // Cleaned filename
         }).catch(err => console.error("Error generating PDF:", err));
     };
 
@@ -267,11 +270,30 @@ const RoutineView = () => {
                         </Form.Select>
                     </Form.Group>
                 </Col>
+
+                <Col md={4}>
+                    <Form.Group controlId="semesterSelect">
+                        <Form.Label>Semester</Form.Label>
+                        <Form.Select
+                        value={selectedSemester}
+                        onChange={(e) => setSelectedSemester(e.target.value)}
+                        disabled={!selectedProgram}
+                        >
+                        <option value="">{selectedProgram ? '-- Select Semester --' : 'Select Program First'}</option>
+                        {semesters.map(sem => (
+                            <option key={sem} value={sem}>Semester - {sem}</option>
+                        ))}
+                        </Form.Select>
+                    </Form.Group>
+                </Col>
+
                 <Col md={4}>
                         <Form.Group controlId="sectionSelect">
                             <Form.Label>Section</Form.Label>
-                            <Form.Select value={selectedSection} onChange={(e) => setSelectedSection(e.target.value)} disabled={!selectedProgram}>
-                                <option value="">{selectedProgram ? '-- Select Section --' : 'Select Program First'}</option>
+                            <Form.Select value={selectedSection} onChange={(e) => setSelectedSection(e.target.value)} disabled={!selectedProgram || !selectedSemester}>
+                                <option value="">
+                                {!selectedProgram ? 'Select Program First' : !selectedSemester ? 'Select Semester First' : '-- Select Section --'}
+                                </option>
                                 {sections.map(section => (<option key={section} value={section}>Section - {section}</option> ))}
                             </Form.Select>
                         </Form.Group>
@@ -287,7 +309,9 @@ const RoutineView = () => {
                 <>
                 {/* Added container div with ID for downloads */}
                 <div className="routine-container mb-3" id="routine-table-container">
-                     <h4 className="text-center mb-3">{selectedProgram} - Section {selectedSection} Routine</h4>
+                     <h4 className="text-center mb-3">
+                        {selectedProgram} - Section {selectedSection} - Semester {selectedSemester} Routine
+                    </h4>
                      <div className="table-responsive" id="routine-table"> {/* Keep ID on table if needed by specific styling */}
                         <Table bordered hover className="routine-table text-center">
                             <thead /* className="table-dark" - Removed dark header for better PDF/Image capture */>
@@ -310,7 +334,7 @@ const RoutineView = () => {
                 </div>
                 </>
             )}
-            {!loading && !error && (!selectedProgram || !selectedSection) && <Alert variant="info">Please select a Program and Section to view the routine.</Alert>}
+            {!loading && !error && (!selectedProgram || !selectedSection) && <Alert variant="info">Please select the Program, Semester and Section to view the routine.</Alert>}
 
             <style>
                 {`

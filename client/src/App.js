@@ -40,10 +40,10 @@ function NavigationBar() {
                   Teacher's Routine
                 </Nav.Link>
                 <Nav.Link as={Link} to="/add-course">
-                  Add Course
+                  Course
                 </Nav.Link>
                 <Nav.Link as={Link} to="/add-teacher">
-                  Add Teacher
+                  Teacher
                 </Nav.Link>
               </>
             )}
