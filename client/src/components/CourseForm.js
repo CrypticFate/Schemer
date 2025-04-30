@@ -51,11 +51,19 @@ const CourseForm = () => {
       setLoading(true);
       const response = await fetch("http://localhost:5000/api/courses");
       const data = await response.json();
-      setCourses(data);
-      setError("");
+
+      // Ensure courses is always an array
+      if (Array.isArray(data)) {
+        setCourses(data);
+      } else {
+        console.error("Invalid courses data received:", data);
+        setCourses([]);
+        setError("Invalid data format received from server");
+      }
     } catch (err) {
-      setError("Failed to fetch courses");
       console.error("Error fetching courses:", err);
+      setCourses([]); // Ensure courses is an empty array on error
+      setError("Failed to fetch courses");
     } finally {
       setLoading(false);
     }

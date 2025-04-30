@@ -168,6 +168,8 @@ const AllocationList = ({ refresh }) => {
                     <th className="w-20">Time</th>
                     <th className="w-25">Course</th>
                     <th className="w-25">Teacher</th>
+                    <th style={{ width: "10%" }}>Section</th>{" "}
+                    {/* Added Section Header */}
                     <th className="w-15">Room</th>
                     <th className="w-15">Actions</th>
                   </tr>
@@ -185,7 +187,7 @@ const AllocationList = ({ refresh }) => {
                       </td>
                       <td>
                         <span className="d-block course-name-display">
-                          {alloc.course_name}
+                          {alloc.course_code} - {alloc.course_name}
                         </span>
                         <Badge
                           pill
@@ -199,6 +201,12 @@ const AllocationList = ({ refresh }) => {
                       </td>
                       <td className="teacher-name-display">
                         {alloc.teacher_name || "N/A"}
+                      </td>
+                      {/* Added Section Cell */}
+                      <td className="text-center">
+                        <span className="d-block section-display">
+                          {alloc.program} - {alloc.section || "N/A"}
+                        </span>
                       </td>
                       <td>
                         <span className="d-block room-number-display">
