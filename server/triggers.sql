@@ -16,26 +16,8 @@ CREATE OR REPLACE FUNCTION check_teacher_workload()
 RETURNS TRIGGER AS $$
 DECLARE
     teacher_allocations RECORD;
-    total_hours DECIMAL := 0;
-    daily_hours DECIMAL := 0;
-    workload_cursor CURSOR(t_id INTEGER) FOR
-        SELECT c.credit_hours
-        FROM allocations a
-        JOIN courses c ON a.course_id = c.course_id
-        WHERE a.teacher_id = t_id;
-    
-    daily_cursor CURSOR(t_id INTEGER, d_id INTEGER) FOR
-        SELECT COALESCE(SUM(c.credit_hours), 0) as daily_total
-        FROM allocations a
-        JOIN courses c ON a.course_id = c.course_id
-        WHERE a.teacher_id = t_id AND a.day_id = d_id;
 BEGIN
-    -- Check daily workload first
-    OPEN daily_cursor(NEW.teacher_id, NEW.day_id);
-    FETCH daily_cursor INTO daily_hours;
-    CLOSE daily_cursor;
-    
-    -- Add new course hours to daily total
+    -- Check if course exists
     SELECT credit_hours INTO teacher_allocations 
     FROM courses 
     WHERE course_id = NEW.course_id;
@@ -44,33 +26,7 @@ BEGIN
         RAISE EXCEPTION 'Course with ID % not found', NEW.course_id;
     END IF;
     
-    daily_hours := daily_hours + teacher_allocations.credit_hours;
-    
-    -- daily
-    IF daily_hours > 4 THEN
-        RAISE EXCEPTION 'Teacher daily workload would exceed 4 hours for this day (Current: % + New: %)', 
-            (daily_hours - teacher_allocations.credit_hours), 
-            teacher_allocations.credit_hours;
-    END IF;
-
-    -- weekly 
-    total_hours := 0; 
-    
-    -- Get total existing hours
-    SELECT COALESCE(SUM(c.credit_hours), 0) INTO total_hours
-    FROM allocations a
-    JOIN courses c ON a.course_id = c.course_id
-    WHERE a.teacher_id = NEW.teacher_id;
-    
-    -- Add the new course's credit hours to weekly total
-    total_hours := total_hours + teacher_allocations.credit_hours;
-    
-    IF total_hours > 13 THEN
-        RAISE EXCEPTION 'Teacher weekly workload would exceed 13 hours (Current: % + New: %)', 
-            (total_hours - teacher_allocations.credit_hours), 
-            teacher_allocations.credit_hours;
-    END IF;
-    
+    -- No workload limits, just return NEW
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -159,16 +115,20 @@ CREATE OR REPLACE FUNCTION log_allocation_changes()
 RETURNS TRIGGER AS $$
 BEGIN
     IF (TG_OP = 'INSERT') THEN
-        INSERT INTO allocation_logs (
-            allocation_id, teacher_id, course_id, room_id, day_id, slot_id, action
-        ) VALUES (
-            NEW.allocation_id, NEW.teacher_id, NEW.course_id, NEW.room_id, NEW.day_id, NEW.slot_id, 'INSERT'
+        INSERT INTO allocation_logs (action_type, description, created_at) 
+        VALUES (
+            'INSERT',
+            format('New allocation created: Teacher=%s, Course=%s, Room=%s, Day=%s, Slot=%s',
+                NEW.teacher_id, NEW.course_id, NEW.room_id, NEW.day_id, NEW.slot_id),
+            CURRENT_TIMESTAMP
         );
     ELSIF (TG_OP = 'DELETE') THEN
-        INSERT INTO allocation_logs (
-            allocation_id, teacher_id, course_id, room_id, day_id, slot_id, action
-        ) VALUES (
-            OLD.allocation_id, OLD.teacher_id, OLD.course_id, OLD.room_id, OLD.day_id, OLD.slot_id, 'DELETE'
+        INSERT INTO allocation_logs (action_type, description, created_at)
+        VALUES (
+            'DELETE',
+            format('Allocation deleted: Teacher=%s, Course=%s, Room=%s, Day=%s, Slot=%s',
+                OLD.teacher_id, OLD.course_id, OLD.room_id, OLD.day_id, OLD.slot_id),
+            CURRENT_TIMESTAMP
         );
     END IF;
     RETURN NULL;
@@ -406,3 +366,38 @@ BEGIN
     RETURN v_allocation_id;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Function to check section allocation limit per day
+CREATE OR REPLACE FUNCTION check_section_allocation_per_day()
+RETURNS TRIGGER AS $$
+DECLARE
+    current_count INTEGER;
+BEGIN
+    -- Get current allocation count for this course, section, and day
+    SELECT COUNT(*)
+    INTO current_count
+    FROM allocations
+    WHERE course_id = NEW.course_id
+    AND section = NEW.section
+    AND day_id = NEW.day_id
+    AND allocation_id != COALESCE(NEW.allocation_id, -1); -- Exclude the current allocation if it's an update
+
+    -- Since this is a BEFORE trigger, we need to add 1 to account for the new allocation
+    current_count := current_count + 1;
+
+    -- Check if the total (including this new allocation) would exceed the limit
+    IF current_count > 2 THEN
+        RAISE EXCEPTION 'Section % of course ID % already has % classes on this day. Maximum allowed is 2.',
+            NEW.section, NEW.course_id, current_count - 1;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger for section allocation limit per day
+DROP TRIGGER IF EXISTS check_section_allocation_per_day_trigger ON allocations;
+CREATE TRIGGER check_section_allocation_per_day_trigger
+    BEFORE INSERT ON allocations
+    FOR EACH ROW
+    EXECUTE FUNCTION check_section_allocation_per_day();

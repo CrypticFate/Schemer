@@ -235,7 +235,7 @@ CREATE TRIGGER allocation_changes_update_routine
 
 
 -- Function to get formatted routine (No change needed, reads from generated routine)
-CREATE OR REPLACE FUNCTION get_formatted_routine(selProgram TEXT, selSection INT)
+CREATE OR REPLACE FUNCTION get_formatted_routine(selProgram TEXT, selSection INT, selSemester INT)
 RETURNS TABLE (
     day_name VARCHAR(10),
     time_slot TEXT,
@@ -255,7 +255,13 @@ BEGIN
     FROM routine r
     JOIN days d ON r.day_id = d.day_id
     JOIN time_slots ts ON r.slot_id = ts.slot_id -- Join with time_slots to get times
-    WHERE r.program = selProgram AND r.section = selSection
+    WHERE r.program = selProgram 
+        AND r.section = selSection
+        AND (
+            selSemester IS NULL OR
+            SUBSTRING(r.course_code FROM '\d{4}') IS NOT NULL AND
+            CAST(SUBSTRING(SUBSTRING(r.course_code FROM '\d{4}') FROM 2 FOR 1) AS INTEGER) = selSemester
+        )
     ORDER BY d.day_order, ts.slot_order; -- Order using original tables' order columns
 END;
 $$ LANGUAGE plpgsql;

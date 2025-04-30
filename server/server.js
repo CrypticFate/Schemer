@@ -434,11 +434,11 @@ app.post("/api/allocations", async (req, res) => {
     const allocationDetails = await pool.query(
       // Use pool now
       `SELECT a.allocation_id, t.name as teacher_name, c.course_name, c.course_type, r.room_number, r.is_lab,
-                    d.day_name, ts.start_time, ts.end_time, ts.slot_type, a.program, a.section
-             FROM allocations a
-             JOIN teachers t ON a.teacher_id = t.teacher_id JOIN courses c ON a.course_id = c.course_id
-             JOIN rooms r ON a.room_id = r.room_id JOIN days d ON a.day_id = d.day_id
-             JOIN time_slots ts ON a.slot_id = ts.slot_id WHERE a.allocation_id = $1`,
+                  d.day_name, ts.start_time, ts.end_time, ts.slot_type, a.program, a.section
+           FROM allocations a
+           JOIN teachers t ON a.teacher_id = t.teacher_id JOIN courses c ON a.course_id = c.course_id
+           JOIN rooms r ON a.room_id = r.room_id JOIN days d ON a.day_id = d.day_id
+           JOIN time_slots ts ON a.slot_id = ts.slot_id WHERE a.allocation_id = $1`,
       [newAllocationId]
     );
     if (allocationDetails.rows.length === 0) {
@@ -446,9 +446,11 @@ app.post("/api/allocations", async (req, res) => {
         "WARN",
         `Could not fetch details for newly created allocation ID: ${newAllocationId}`
       );
-      res.status(201).json({
-        message: "Allocation created, but details couldn't be fetched.",
-      });
+      res
+        .status(201)
+        .json({
+          message: "Allocation created, but details couldn't be fetched.",
+        });
     } else {
       log("INFO", "Sending success response (201) with allocation details.");
       res.status(201).json(allocationDetails.rows[0]);
@@ -484,10 +486,12 @@ app.post("/api/allocations", async (req, res) => {
     ) {
       log("ERROR", `Database Constraint/Trigger Error: ${err.message}`);
       // Be cautious sending raw DB errors to client
-      res.status(400).json({
-        error:
-          "Allocation constraint violation. Check teacher workload or section limits.",
-      });
+      res
+        .status(400)
+        .json({
+          error:
+            "Allocation constraint violation. Check teacher workload or section limits.",
+        });
     } else {
       log("ERROR", "Unknown Server Error:", err);
       res
@@ -505,7 +509,7 @@ app.get("/api/allocations", async (req, res) => {
   log("INFO", "/api/allocations GET request received");
   try {
     const allAllocations = await pool.query(`
-            SELECT a.allocation_id, t.name as teacher_name, c.course_name, c.course_type, r.room_number, r.is_lab,
+            SELECT a.allocation_id, t.name as teacher_name, c.course_code, c.course_name, c.course_type, r.room_number, r.is_lab,
                    d.day_name, ts.start_time, ts.end_time, ts.slot_type, a.program, a.section
             FROM allocations a
             JOIN teachers t ON a.teacher_id = t.teacher_id JOIN courses c ON a.course_id = c.course_id
@@ -604,14 +608,16 @@ app.delete("/api/allocations/:id", async (req, res) => {
 // Get routine
 app.get("/api/routine", async (req, res) => {
   try {
-    const { program, section } = req.query;
-    if (!program || !section)
+    const { program, section, semester } = req.query;
+    if (!program || !section || !semester)
       return res
         .status(400)
         .json({ error: "Program and Section are required" });
+
+    //semester = parseInt(req.query.semester);
     const routine = await pool.query(
-      "SELECT * FROM get_formatted_routine($1, $2)",
-      [program, section]
+      "SELECT * FROM get_formatted_routine($1, $2, $3)",
+      [program, section, semester]
     );
     const formattedRoutine = routine.rows.reduce((acc, row) => {
       const { day_name, time_slot, course_code, room_number, teacher_name } =
