@@ -11,7 +11,7 @@ import {
   Modal,
   Spinner,
 } from "react-bootstrap";
-import axios from "axios"; // Assuming you might use axios elsewhere, added import
+import axios from "axios";
 
 const CourseForm = () => {
   // --- State ---
@@ -274,7 +274,7 @@ const CourseForm = () => {
                                </Badge>
                              </td>
                              <td className="text-center">
-                               <Button variant="outline-danger" size="sm" onClick={() => handleDeleteClick(course)} >
+                               <Button variant="danger" size="sm" onClick={() => handleDeleteClick(course)} >
                                  Delete
                                </Button>
                              </td>

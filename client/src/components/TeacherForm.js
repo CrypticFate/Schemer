@@ -197,8 +197,8 @@ const TeacherForm = () => {
                                  <td>{teacher.name}</td>
                                  <td>{teacher.email}</td>
                                  <td className="text-center">
-                                   <Button variant="outline-warning" size="sm" className="me-2" onClick={() => handleEditClick(teacher)} disabled={isCheckingDelete || isSubmittingDelete}> Edit </Button>
-                                   <Button variant="outline-danger" size="sm" onClick={() => handleDeleteClick(teacher)} disabled={isCheckingDelete || isSubmittingDelete}> {isCheckingDelete && deleteTeacher?.teacher_id === teacher.teacher_id ? <Spinner as="span" size="sm" animation="border"/> : 'Delete'} </Button>
+                                   <Button variant="warning" size="sm" className="me-2" onClick={() => handleEditClick(teacher)} disabled={isCheckingDelete || isSubmittingDelete}> Edit </Button>
+                                   <Button variant="danger" size="sm" onClick={() => handleDeleteClick(teacher)} disabled={isCheckingDelete || isSubmittingDelete}> {isCheckingDelete && deleteTeacher?.teacher_id === teacher.teacher_id ? <Spinner as="span" size="sm" animation="border"/> : 'Delete'} </Button>
                                  </td>
                                </tr> ))
                            ) : ( <tr><td colSpan="3" className="text-center text-muted fst-italic p-3">{searchTerm ? "No teachers match search." : "No teachers found."}</td></tr> )}
