@@ -612,7 +612,7 @@ app.get("/api/routine", async (req, res) => {
     if (!program || !section || !semester)
       return res
         .status(400)
-        .json({ error: "Program and Section are required" });
+        .json({ error: "Program, Semester and Section are required" });
 
     //semester = parseInt(req.query.semester);
     const routine = await pool.query(
@@ -620,10 +620,10 @@ app.get("/api/routine", async (req, res) => {
       [program, section, semester]
     );
     const formattedRoutine = routine.rows.reduce((acc, row) => {
-      const { day_name, time_slot, course_code, room_number, teacher_name } =
+      const { day_name, time_slot, course_code, room_number, teacher_name, credit_hours } =
         row;
       if (!acc[day_name]) acc[day_name] = {};
-      acc[day_name][time_slot] = { course_code, room_number, teacher_name };
+      acc[day_name][time_slot] = { course_code, room_number, teacher_name, credit_hours };
       return acc;
     }, {});
     res.json(formattedRoutine);

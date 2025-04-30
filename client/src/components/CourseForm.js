@@ -133,10 +133,6 @@ const CourseForm = () => {
     setDeleteCourse(course); // Set the course to be potentially deleted
     setError(""); // Clear general errors
 
-    // Check if the course has allocations before showing modal
-    // NOTE: This requires a backend endpoint like `/api/courses/:id/check-delete`
-    // If you don't have that, you might skip this check and just show the modal directly,
-    // relying on the backend DELETE to fail if allocations exist.
     try {
       // Assuming an endpoint exists:
        // const checkResponse = await fetch(`http://localhost:5000/api/courses/${course.course_id}/check-delete`);
@@ -225,7 +221,20 @@ const CourseForm = () => {
                     <Col md={6}><Form.Group><Form.Label className="fw-bold">Course Name</Form.Label><Form.Control type="text" value={courseName} onChange={(e) => setCourseName(e.target.value)} placeholder="e.g. Intro to Programming" required disabled={isSubmitting}/></Form.Group></Col>
                   </Row>
                   <Row className="mb-3">
-                    <Col md={6}><Form.Group><Form.Label className="fw-bold">Credit Hours</Form.Label><Form.Select value={creditHours} onChange={(e) => setCreditHours(e.target.value)} required disabled={isSubmitting} aria-label="Select Credit Hours"><option value="">Select Credit</option><option value="1.5">1.5</option><option value="3.0">3.0</option></Form.Select></Form.Group></Col>
+                    <Col md={6}><Form.Group><Form.Label className="fw-bold">Credit Hours</Form.Label><Form.Select value={creditHours} onChange={(e) => setCreditHours(e.target.value)} required disabled={isSubmitting} aria-label="Select Credit Hours">
+                      <option value="">Select Credit</option>
+                      {courseType === "Lab" ? (
+                      <>
+                          <option value="0.75">0.75 (Lab)</option>
+                          <option value="1.5">1.5 (Lab)</option>
+                        </>
+                      ) : courseType === "Theory" ? (
+                        <>
+                          <option value="2.0">2.0 (Theory)</option>
+                          <option value="3.0">3.0 (Theory)</option>
+                        </>
+                      ) : null}
+                    </Form.Select></Form.Group></Col>
                     <Col md={6}><Form.Group><Form.Label className="fw-bold">Program</Form.Label><Form.Select value={programName} onChange={(e) => setProgramName(e.target.value)} required disabled={isSubmitting} aria-label="Select Program"><option value="">Select Program</option>{Object.keys(programMap).map((prog) => (<option key={prog} value={prog}>{prog}</option>))}</Form.Select></Form.Group></Col>
                   </Row>
                   <Row className="mb-3">

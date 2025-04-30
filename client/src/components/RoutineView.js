@@ -283,6 +283,14 @@ const RoutineView = () => {
                               ({slotData.teacher_name})
                             </div>
                           )}
+
+                          {/* Additional info based on credit_hours */}
+                          {slotData.credit_hours && parseFloat(slotData.credit_hours) === 0.75 && isLab && (
+                            <div className="text-muted small">Biweekly</div>
+                          )}
+                          {slotData.credit_hours && parseFloat(slotData.credit_hours) === 2.0 && !isLab && (
+                            <div className="text-muted small">50 mins class</div>
+                          )}
                           <Badge
                             pill
                             bg={isLab ? "primary" : "success"}

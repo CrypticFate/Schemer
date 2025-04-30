@@ -241,7 +241,8 @@ RETURNS TABLE (
     time_slot TEXT,
     course_code VARCHAR(20),
     room_number VARCHAR(10),
-    teacher_name VARCHAR(100)
+    teacher_name VARCHAR(100),
+    credit_hours DECIMAL(3,1)
 ) AS $$
 BEGIN
     RETURN QUERY
@@ -251,9 +252,11 @@ BEGIN
         CONCAT(TO_CHAR(ts.start_time, 'HH24:MI'), ' - ', TO_CHAR(ts.end_time, 'HH24:MI')) as time_slot,
         r.course_code,
         r.room_number,
-        r.teacher_name
+        r.teacher_name,
+        c.credit_hours
     FROM routine r
     JOIN days d ON r.day_id = d.day_id
+    JOIN courses c ON r.course_code = c.course_code -- Join with courses to get course details
     JOIN time_slots ts ON r.slot_id = ts.slot_id -- Join with time_slots to get times
     WHERE r.program = selProgram 
         AND r.section = selSection
